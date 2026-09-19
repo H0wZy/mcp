@@ -4,17 +4,17 @@
   "description": "Google Antigravity MCP Server connecting any MCP client to Gemini 3.1 Pro / Flash",
   "type": "module",
   "bin": {
-    "h0wzy-mcp-antigravity": "./bin/cli.js"
+    "h0wzy-mcp-antigravity": "bin/cli.js"
   },
   "main": "./src/index.js",
   "author": "Marcos (H0wZy) <h0wzymarcos@gmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/H0wZy/mcp.git",
+    "url": "git+https://github.com/H0wZy/mcp.git",
     "directory": "servers/antigravity"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public"
   }
 }

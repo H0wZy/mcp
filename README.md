@@ -2,7 +2,7 @@
 
 [![CI Pipeline](https://github.com/H0wZy/mcp/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/H0wZy/mcp/actions/workflows/ci.yml)
 [![GitHub Release](https://img.shields.io/github/v/release/H0wZy/mcp?color=04B575&label=release&logo=github)](https://github.com/H0wZy/mcp/releases)
-[![Packages](https://img.shields.io/badge/packages-%40h0wzy%2Fmcp-blue?logo=github)](https://github.com/H0wZy/mcp/packages)
+[![npm](https://img.shields.io/npm/v/%40h0wzy%2Fmcp?color=CB3837&logo=npm)](https://www.npmjs.com/package/@h0wzy/mcp)
 [![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](cli)
 [![Node Version](https://img.shields.io/badge/Node-20+-339933?logo=node.js)](package.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)

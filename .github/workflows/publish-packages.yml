@@ -1,4 +1,4 @@
-name: 📦 Publish Packages to GitHub Packages
+name: 📦 Publish Packages to npm
 
 on:
   release:
@@ -7,11 +7,11 @@ on:
 
 permissions:
   contents: read
-  packages: write
+  id-token: write # Required for npm Trusted Publishing via OIDC
 
 jobs:
   publish-packages:
-    name: 🚀 Publish Scoped Packages
+    name: 🚀 Publish Packages to npmjs.com
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
@@ -21,29 +21,20 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 22
-          registry-url: 'https://npm.pkg.github.com'
-          scope: '@h0wzy'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Publish @h0wzy/mcp-shared
-        run: npm publish ./shared --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish ./shared --provenance
         continue-on-error: true
 
       - name: Publish @h0wzy/mcp-server-antigravity
-        run: npm publish ./servers/antigravity --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish ./servers/antigravity --provenance
         continue-on-error: true
 
       - name: Publish @h0wzy/mcp-server-codex
-        run: npm publish ./servers/codex --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish ./servers/codex --provenance
         continue-on-error: true
 
       - name: Publish @h0wzy/mcp
-        run: npm publish ./npm --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish ./npm --provenance
         continue-on-error: true
