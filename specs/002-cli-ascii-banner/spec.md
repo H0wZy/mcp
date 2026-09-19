@@ -12,18 +12,18 @@
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Modern Terminal Visual Identity (Priority: P1)
+### User Story 1 - Modern Terminal Visual Identity & Claude Code Style Blocky Typography (Priority: P1)
 
-As a developer launching `h0wzy-mcp` in my interactive terminal, I want to be greeted with a polished, modern ASCII art banner and application identity, so that the CLI feels like a professional, first-class AI developer tool rather than a generic utility.
+As a developer launching `h0wzy-mcp` in my interactive terminal, I want to be greeted with a polished, modern ASCII art banner featuring chunky, blocky, square pixel lettering (inspired by the Claude Code CLI logo aesthetic) representing `H0wZy MCP`, so that the CLI feels like a professional, aesthetic, first-class AI developer tool rather than a generic utility with standard slanting fonts.
 
-**Why this priority**: Immediate visual brand identity and polish is the primary objective of this feature.
+**Why this priority**: Immediate visual brand identity, polish, and developer aesthetic delight is the primary objective of this feature.
 
-**Independent Test**: Launch the CLI directly in an interactive terminal session (`h0wzy-mcp` or `go run ./cli`); observe the formatted ASCII banner, styled typography, and metadata header before the interactive prompts appear.
+**Independent Test**: Launch the CLI directly in an interactive terminal session (`h0wzy-mcp` or `go run ./cli`); observe the formatted blocky ASCII banner, styled typography, and metadata header before the interactive prompts appear.
 
 **Acceptance Scenarios**:
 
-1. **Given** an interactive terminal (TTY) with standard width (>= 80 columns), **When** the developer launches `h0wzy-mcp`, **Then** the system displays the styled ASCII art banner followed by the application description, version, and interactive checklist.
-2. **Given** a terminal supporting colors, **When** the banner renders, **Then** it uses modern accent styling (cyan/teal highlight) consistent with the project's visual theme without rainbow or blinking effects.
+1. **Given** an interactive terminal (TTY) with standard width (>= 80 columns), **When** the developer launches `h0wzy-mcp`, **Then** the system displays the styled blocky square ASCII art banner ("H0wZy MCP") followed by the application description, version, and interactive checklist.
+2. **Given** a terminal supporting colors, **When** the banner renders, **Then** it uses modern accent styling (such as Claude/Anthropic terracotta `#D97757` or high-contrast modern teal `#00ADD8`) consistent with AI coding harnesses without rainbow or blinking effects.
 
 ---
 
@@ -69,7 +69,7 @@ As a developer working in constrained environments (such as a split terminal pan
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST render an ASCII art banner representing the project name (`H0wZy/mcp` / `H0wZy`) when launched in an interactive terminal.
+- **FR-001**: The system MUST render an ASCII art banner representing the project name (`H0wZy MCP`) with chunky, blocky square lettering inspired by the Claude Code CLI logo aesthetic when launched in an interactive terminal.
 - **FR-002**: The banner MUST be stored as a static raw string constant within the Go codebase to guarantee zero runtime generation overhead and zero new third-party dependencies.
 - **FR-003**: The system MUST detect whether stdout is an interactive terminal (TTY) and suppress the banner when output is redirected to a file or piped into another process.
 - **FR-004**: The system MUST query the terminal width and automatically display a compact single-line text header if the terminal width is less than the ASCII banner width.

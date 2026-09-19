@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestRenderCompactHeader(t *testing.T) {
@@ -52,14 +53,30 @@ func TestRenderBanner_WideTerminal(t *testing.T) {
 	}
 }
 
+func TestSlashedZeroInBanner(t *testing.T) {
+	lines := strings.Split(asciiBanner, "\n")
+	if len(lines) < 4 {
+		t.Fatalf("Expected banner to have at least 4 lines")
+	}
+	// Row 2 and Row 3 must contain the diagonal slash cut inside the 0
+	if !strings.Contains(lines[2], "█╗") {
+		t.Errorf("Expected row 2 of banner to contain upper slash cut '█╗' in the zero")
+	}
+	if !strings.Contains(lines[3], "█╔╝") {
+		t.Errorf("Expected row 3 of banner to contain lower slash cut '█╔╝' in the zero")
+	}
+}
+
 func TestAsciiBannerProperties(t *testing.T) {
 	lines := strings.Split(asciiBanner, "\n")
 	if len(lines) < 4 {
 		t.Errorf("Expected banner to have multiple lines, got %d", len(lines))
 	}
 	for i, line := range lines {
-		if len(line) > 65 {
-			t.Errorf("Line %d exceeds recommended terminal width limit: %d chars", i, len(line))
+		runeCount := utf8.RuneCountInString(line)
+		t.Logf("Line %d width: %d runes", i, runeCount)
+		if runeCount > 80 {
+			t.Errorf("Line %d exceeds 80-column terminal width limit: %d runes", i, runeCount)
 		}
 	}
 }
