@@ -179,7 +179,7 @@ func RenderNotice(info *UpdateInfo) string {
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#00ADD8")).
+		BorderForeground(lipgloss.Color("#C084FC")).
 		Padding(0, 1).
 		MarginBottom(1)
 

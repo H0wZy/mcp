@@ -24,7 +24,7 @@ var upgradeCmd = &cobra.Command{
 	Long:    `Checks the remote release registry (npm and GitHub) and upgrades the local installation to the newest version.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		successStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#04B575"))
-		boldStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00ADD8"))
+		boldStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#C084FC"))
 
 		fmt.Println("Checking for updates...")
 		info, err := version.CheckForUpdate(true)

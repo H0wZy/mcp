@@ -39,7 +39,7 @@ func RunVersionOutput(forceCheck, outputJSON bool) error {
 		return nil
 	}
 
-	boldStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00ADD8"))
+	boldStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#C084FC"))
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
 	successStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#04B575"))
 	alertStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFA500"))

@@ -31,8 +31,8 @@ var doctorCmd = &cobra.Command{
 			return nil
 		}
 
-		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00ADD8"))
-		dividerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#005F87"))
+		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#C084FC"))
+		dividerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7E22CE"))
 		checkStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#04B575"))
 		crossStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#EF4444"))
 		nameStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFFFF"))
