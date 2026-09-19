@@ -1,22 +1,61 @@
-name: CI
+name: CI Pipeline
 
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      debug_enabled:
+        type: boolean
+        description: 'Pause execution and open interactive Web/SSH terminal (tmate)'
+        required: false
+        default: false
+      debug_on_failure:
+        type: boolean
+        description: 'Open interactive Web/SSH terminal ONLY if a step fails'
+        required: false
+        default: false
 
 jobs:
-  test:
-    name: Test on ${{ matrix.os }}
+  validate:
+    name: 🔍 Validate Formats & Syntax
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate JSON & Package Syntax
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('package.json'))"
+          node -e "JSON.parse(require('fs').readFileSync('servers/antigravity/package.json'))"
+          node -e "JSON.parse(require('fs').readFileSync('servers/codex/package.json'))"
+          node -e "JSON.parse(require('fs').readFileSync('shared/package.json'))"
+          node --check npm/bin/h0wzy-mcp.js
+          node --check servers/antigravity/bin/cli.js
+          node --check servers/codex/bin/cli.js
+
+      - name: Interactive debug session (tmate)
+        if: ${{ always() && ((inputs.debug_enabled == true) || (failure() && inputs.debug_on_failure == true)) }}
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: false
+
+  test-servers:
+    name: ⚡ Test MCP Servers (${{ matrix.os }}, Node ${{ matrix.node-version }})
+    needs: [validate]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         node-version: [20.x, 22.x]
-        go-version: ['1.24', '1.26']
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -26,13 +65,106 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
 
-      - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ matrix.go-version }}
-
       - name: Run Node MCP Server Tests
         run: npm test
 
-      - name: Run Go CLI Tests
+      - name: Interactive debug session (tmate)
+        if: ${{ always() && ((inputs.debug_enabled == true) || (failure() && inputs.debug_on_failure == true)) }}
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: false
+
+  test-cli:
+    name: 🐹 Test Go CLI (${{ matrix.os }})
+    needs: [validate]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Run Go Unit Tests
         run: go test -v ./cli/...
+
+      - name: Interactive debug session (tmate)
+        if: ${{ always() && ((inputs.debug_enabled == true) || (failure() && inputs.debug_on_failure == true)) }}
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: false
+
+  build-cli:
+    name: 📦 Build Multi-Platform CLI Binaries
+    needs: [test-servers, test-cli]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Compile Windows amd64 Binary
+        run: env GOOS=windows GOARCH=amd64 go build -o dist/h0wzy-mcp-windows-amd64.exe ./cli
+
+      - name: Compile Linux amd64 Binary
+        run: env GOOS=linux GOARCH=amd64 go build -o dist/h0wzy-mcp-linux-amd64 ./cli
+
+      - name: Compile macOS arm64 Binary
+        run: env GOOS=darwin GOARCH=arm64 go build -o dist/h0wzy-mcp-darwin-arm64 ./cli
+
+      - name: Compile macOS amd64 Binary
+        run: env GOOS=darwin GOARCH=amd64 go build -o dist/h0wzy-mcp-darwin-amd64 ./cli
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: h0wzy-mcp-binaries
+          path: dist/*
+          retention-days: 7
+
+      - name: Interactive debug session (tmate)
+        if: ${{ always() && ((inputs.debug_enabled == true) || (failure() && inputs.debug_on_failure == true)) }}
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: false
+
+  verify-package:
+    name: 🚀 Verify Distribution & npm Package
+    needs: [build-cli]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verify package permissions and runner script
+        run: |
+          chmod +x npm/bin/h0wzy-mcp.js
+          chmod +x servers/antigravity/bin/cli.js
+          chmod +x servers/codex/bin/cli.js
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json'));
+            if (!pkg.name || !pkg.version) process.exit(1);
+            console.log('✅ Package verification succeeded: ' + pkg.name + '@' + pkg.version);
+          "
+
+      - name: Interactive debug session (tmate)
+        if: ${{ always() && ((inputs.debug_enabled == true) || (failure() && inputs.debug_on_failure == true)) }}
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: false

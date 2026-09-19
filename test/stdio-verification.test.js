@@ -1,15 +1,56 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import path from 'node:path';
 
 function queryServer(scriptPath, messages) {
   return new Promise((resolve, reject) => {
-    const child = spawn('node', [scriptPath], {
+    const fullPath = path.resolve(process.cwd(), scriptPath);
+    const child = spawn(process.execPath, [fullPath], {
       stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: process.cwd(),
+      env: { ...process.env },
     });
 
     const responses = [];
     let buffer = '';
+    let stderrOutput = '';
+    let isDone = false;
+
+    const timer = setTimeout(() => {
+      if (isDone) return;
+      isDone = true;
+      child.kill('SIGKILL');
+      if (responses.length < messages.length) {
+        reject(
+          new Error(
+            `Timeout (10s) waiting for server responses (received ${responses.length}/${messages.length}).\nStderr: ${stderrOutput}`
+          )
+        );
+      } else {
+        resolve(responses);
+      }
+    }, 10000);
+
+    const finish = (result) => {
+      if (isDone) return;
+      isDone = true;
+      clearTimeout(timer);
+      try {
+        child.kill();
+      } catch {}
+      resolve(result);
+    };
+
+    const fail = (err) => {
+      if (isDone) return;
+      isDone = true;
+      clearTimeout(timer);
+      try {
+        child.kill();
+      } catch {}
+      reject(err);
+    };
 
     child.stdout.on('data', (data) => {
       buffer += data.toString();
@@ -17,12 +58,13 @@ function queryServer(scriptPath, messages) {
       buffer = lines.pop(); // keep last partial line in buffer
 
       for (const line of lines) {
-        if (!line.trim()) continue;
+        const trimmed = line.trim();
+        if (!trimmed) continue;
         try {
-          responses.push(JSON.parse(line.trim()));
+          responses.push(JSON.parse(trimmed));
           if (responses.length === messages.length) {
-            child.kill();
-            resolve(responses);
+            finish(responses);
+            return;
           }
         } catch {
           // ignore non-json lines
@@ -31,19 +73,22 @@ function queryServer(scriptPath, messages) {
     });
 
     child.stderr.on('data', (err) => {
-      // keep for debugging
+      stderrOutput += err.toString();
     });
 
-    child.on('error', reject);
+    child.on('error', (err) => {
+      fail(new Error(`Failed to spawn child process: ${err.message}\nStderr: ${stderrOutput}`));
+    });
+
+    child.on('close', (code) => {
+      if (responses.length < messages.length && code !== 0 && code !== null) {
+        fail(new Error(`Server exited prematurely with code ${code}.\nStderr: ${stderrOutput}`));
+      }
+    });
 
     for (const msg of messages) {
       child.stdin.write(JSON.stringify(msg) + '\n');
     }
-
-    setTimeout(() => {
-      child.kill();
-      resolve(responses);
-    }, 4000);
   });
 }
 

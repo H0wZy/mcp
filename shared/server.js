@@ -105,7 +105,10 @@ export function createMcpServer({ name, version, tools = [] }) {
   }
 
   function start() {
-    const rl = readline.createInterface({ input: process.stdin });
+    const rl = readline.createInterface({
+      input: process.stdin,
+      terminal: false,
+    });
     rl.on('line', async (line) => {
       const trimmed = line.trim();
       if (!trimmed) return;
