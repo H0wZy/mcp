@@ -26,7 +26,7 @@ var (
 )
 
 func RunInteractive() error {
-	fmt.Println(titleStyle.Render("🚀 H0wZy/mcp — Multi-Agent MCP Hub Setup"))
+	PrintBanner()
 
 	// 1. Scan environment
 	fmt.Println("Scanning local AI developer CLIs...")
