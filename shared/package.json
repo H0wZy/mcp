@@ -1,7 +1,14 @@
 {
   "name": "@h0wzy/mcp-shared",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Shared cross-platform utilities, binary resolvers, resilient error handlers, and generic MCP stdio server for H0wZy/mcp",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "shared",
+    "stdio",
+    "json-rpc"
+  ],
   "type": "module",
   "main": "index.js",
   "exports": {
