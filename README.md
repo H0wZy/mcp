@@ -7,6 +7,7 @@
 [![Node Version](https://img.shields.io/badge/Node-20+-339933?logo=node.js)](package.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](https://github.com/H0wZy/mcp)
+[![Security Audit: Passed](https://img.shields.io/badge/Security_Audit-Passed-C084FC?logo=shield)](SECURITY_AUDIT.md)
 
 Centralize, enhance, and distribute high-performance **MCP (Model Context Protocol)** servers connecting the world's leading AI developer CLIs:
 - **Claude Code** (Anthropic)
@@ -37,8 +38,8 @@ Explore the full interactive system architecture with Light/Dark themes and sema
    - Directly executes local binaries with sub-50ms invocation overhead, removing runtime `npx` network/cache-checking delays.
 4. **Resilient Rate Limits & Quotas:**
    - Gracefully traps HTTP 429 and `ResourceExhausted` provider quota limits, returning structured `{ isError: true }` responses so host agents fall back seamlessly without crashing the session.
-5. **Interactive Go CLI (`h0wzy-mcp`):**
-   - Auto-detects local CLI installations (`claude`, `codex`, `agy`), tests binary health, and guides the user through an interactive checklist to configure MCP connections globally or per-project.
+5. **Interactive Go CLI (`hmcp` / `h0wzy-mcp`):**
+   - Auto-detects local CLI installations (`claude`, `codex`, `agy`), tests binary health, checks for updates, and guides the user through an interactive checklist to configure MCP connections globally or per-project.
 
 ---
 
@@ -46,12 +47,13 @@ Explore the full interactive system architecture with Light/Dark themes and sema
 
 ```text
 H0wZy/mcp/
-├── .github/workflows/          # CI/CD & cross-platform testing
-├── cli/                        # Interactive CLI in Go (Bubble Tea / Huh)
-│   ├── cmd/                    # Commands: install, doctor, list, remove
-│   ├── detector/               # Discovers local claude, codex, and agy CLIs
-│   ├── config/                 # Read/write ~/.claude.json, config.toml, etc.
-│   └── ui/                     # Terminal user interface
+├── .github/workflows/          # CI/CD pipelines & cross-platform testing
+├── cli/                        # Interactive CLI in Go (Bubble Tea / Lip Gloss)
+│   ├── cmd/                    # Commands: doctor, install, list, remove, setup-path, upgrade, version
+│   ├── config/                 # Read/write ~/.claude.json, config.toml, and mcp_config.json
+│   ├── detector/               # Discovers local claude, codex, and agy CLIs + health checks
+│   ├── ui/                     # Terminal user interface, lilac ASCII banner, and interactive TUI
+│   └── version/                # Background update detector & registry version cache
 ├── servers/                    # Decoupled, host-agnostic MCP servers
 │   ├── antigravity/            # Google Antigravity bridge (Gemini 3.1 Pro / Flash)
 │   ├── codex/                  # OpenAI Codex CLI bridge (GPT-5.6 / GPT-6 Astra)
@@ -60,9 +62,11 @@ H0wZy/mcp/
 │   ├── server.js               # createMcpServer() generic JSON-RPC 2.0 stdio engine
 │   ├── executor.js             # Child process runner with timeouts and buffers
 │   ├── resolver.js             # Cross-platform executable resolver
-│   └── errors.js               # Resilient Quota / HTTP 429 error handler
-├── npm/                        # Lightweight npx runner wrapper
+│   └── errors.js               # Resilient Quota, HTTP 429 handler & secret/token sanitizer
+├── npm/                        # Lightweight npx runner wrapper & cross-platform binary installer
 ├── specs/                      # SpecKit feature specs & Archify diagrams
+├── test/                       # Node.js integration & security resilience tests
+├── SECURITY_AUDIT.md           # Security audit, credential double-check & hardening report
 ├── LICENSE                     # MIT License
 └── package.json                # Monorepo workspaces configuration
 ```
@@ -120,13 +124,16 @@ Scanning local AI developer CLIs...
 ### 2. Commands & Management
 
 ```bash
+# Launch interactive TUI setup and configuration
+hmcp
+
 # Check version and verify if updates are available
 hmcp version
 
 # Upgrade hmcp to latest release (or 'hmcp update')
 hmcp upgrade
 
-# Setup PATH and shims (~/.local/bin) so 'hmcp' works everywhere
+# Setup PATH and shims (~/.local/bin) so 'hmcp', 'hwzmcp', and 'h0wzy-mcp' work everywhere
 hmcp setup-path
 
 # Diagnose local environment, paths, and agent communication health
@@ -163,6 +170,17 @@ hmcp remove claude-antigravity
 | **Codex** | `review_codex` | Structured repository code review from OpenAI Codex |
 | **Codex** | `brainstorm_codex` | Architectural exploration, trade-offs, and system design ideation with Codex |
 | **Codex** | `plan_codex` | Step-by-step implementation planning and checklist generation |
+
+---
+
+## 🔒 Security & Privacy
+
+H0wZy/mcp is built with privacy and execution safety as first-class guarantees:
+- **Automatic Token Redaction**: Built-in regex sanitizers proactively scrub OpenAI keys, Google Gemini keys, GitHub/NPM tokens, and Bearer authorization headers before errors or diagnostic messages reach host agents.
+- **Owner-Only File Permissions**: Configuration files (`.claude.json`, `.codex/config.toml`, `.gemini/config/mcp_config.json`) are secured with POSIX mode `0600` (`0700` for directories) on Unix systems to prevent unauthorized local reading.
+- **Atomic Precompiled Downloads**: The npm binary installer streams release archives to unique temporary files and validates payloads before atomic renames, preventing corrupt or truncated executables.
+
+For full audit methodology and double-check verification, read the [Security Audit & Codebase Integrity Report](SECURITY_AUDIT.md).
 
 ---
 
