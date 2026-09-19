@@ -1,20 +1,24 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/H0wZy/mcp/cli/ui"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
 var rootCmd = &cobra.Command{
-	Use:     "hmcp",
-	Aliases: []string{"h0wzy-mcp", "hwzmcp"},
-	Short:   "H0wZy/mcp — The Ultimate Multi-Agent MCP Hub & Go CLI",
+	Use:           "hmcp",
+	Aliases:       []string{"h0wzy-mcp", "hwzmcp"},
+	Short:         "H0wZy/mcp — The Ultimate Multi-Agent MCP Hub & Go CLI",
 	Long: `H0wZy/mcp centralizes and connects Claude Code, OpenAI Codex, and Google Antigravity
 for independent second opinions, cross-reviews, and autonomous multi-agent validation.`,
+	SilenceUsage:  true,
+	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if v, _ := cmd.Flags().GetBool("version"); v {
 			return RunVersionOutput(false, false)
@@ -24,10 +28,10 @@ for independent second opinions, cross-reviews, and autonomous multi-agent valid
 }
 
 func renderCustomHelp(cmd *cobra.Command, args []string) {
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00ADD8"))
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00ADD8")).MarginTop(1)
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#C084FC"))
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#C084FC")).MarginTop(1)
 	cmdStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#04B575"))
-	flagStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#38BDF8"))
+	flagStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#A855F7"))
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
 
 	fmt.Println(titleStyle.Render("🚀 hmcp — The Ultimate Multi-Agent MCP Hub"))
@@ -59,6 +63,11 @@ func renderCustomHelp(cmd *cobra.Command, args []string) {
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			fmt.Println("\n  " + lipgloss.NewStyle().Foreground(lipgloss.Color("#A855F7")).Bold(true).Render("👋 Bye!"))
+			os.Exit(0)
+		}
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }

@@ -11,31 +11,37 @@ import (
 
 const (
 	AppVersion  = "v1.0.2"
-	BannerWidth = 76
+	BannerWidth = 75
 )
 
-// Static, zero-dependency 3D blocky ASCII art for "H0wZy MCP" (Claude Code CLI style with V2 slashed zero)
-const asciiBanner = `██╗  ██╗ ██████╗ ██╗    ██╗███████╗██╗   ██╗   ███╗   ███╗ ██████╗ ██████╗  
-██║  ██║██╔═████╗██║    ██║╚══███╔╝╚██╗ ██╔╝   ████╗ ████║██╔════╝ ██╔══██╗ 
-███████║██║██╔██║██║ █╗ ██║  ███╔╝  ╚████╔╝    ██╔████╔██║██║     ██████╔╝  
-██╔══██║████╔╝██║██║███╗██║ ███╔╝    ╚██╔╝     ██║╚██╔╝██║██║     ██╔═══╝   
-██║  ██║╚██████╔╝╚███╔███╔╝███████╗   ██║      ██║ ╚═╝ ██║╚██████╗██║       
-╚═╝  ╚═╝ ╚═════╝  ╚══╝╚══╝ ╚══════╝   ╚═╝      ╚═╝     ╚═╝ ╚═════╝╚═╝       `
+// Static, zero-dependency 3D blocky ASCII art for "H0wZy MCP" (Claude Code CLI style with V2 slashed zero and aligned P)
+const asciiBanner = `██╗  ██╗ ██████╗ ██╗    ██╗███████╗██╗   ██╗  ███╗   ███╗  ██████╗ ███████╗
+██║  ██║██╔═████╗██║    ██║╚══███╔╝╚██╗ ██╔╝  ████╗ ████║ ██╔════╝ ██╔══██╗
+███████║██║██╔██║██║ █╗ ██║  ███╔╝   ╚████╔╝  ██╔████╔██║ ██║      ██████╔╝
+██╔══██║████╔╝██║██║███╗██║ ███╔╝     ╚██╔╝   ██║╚██╔╝██║ ██║      ██╔═══╝ 
+██║  ██║╚██████╔╝╚███╔███╔╝███████╗    ██║    ██║ ╚═╝ ██║ ╚██████╗ ██║     
+╚═╝  ╚═╝ ╚═════╝  ╚══╝╚══╝ ╚══════╝    ╚═╝    ╚═╝     ╚═╝  ╚═════╝ ╚═╝     `
 
 var (
-	bannerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#00ADD8")).
-			Bold(true)
+	// Gradient from subtle darker purple to vibrant lilac
+	gradientColors = []string{
+		"#6B21A8", // Line 0: Deep purple
+		"#7E22CE", // Line 1: Rich purple
+		"#9333EA", // Line 2: Vibrant purple
+		"#A855F7", // Line 3: Medium purple-lilac
+		"#C084FC", // Line 4: Soft lilac
+		"#E9D5FF", // Line 5: Light lilac glow
+	}
 
 	metaStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#888888"))
 
 	tagStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#04B575")).
+			Foreground(lipgloss.Color("#C084FC")).
 			Bold(true)
 
 	compactStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#00ADD8")).
+			Foreground(lipgloss.Color("#C084FC")).
 			Bold(true)
 )
 
@@ -78,8 +84,13 @@ func renderBanner(width int, isTTY bool) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(bannerStyle.Render(asciiBanner))
-	sb.WriteString("\n\n")
+	lines := strings.Split(asciiBanner, "\n")
+	for i, line := range lines {
+		color := gradientColors[i%len(gradientColors)]
+		sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Bold(true).Render(line))
+		sb.WriteString("\n")
+	}
+	sb.WriteString("\n")
 	sb.WriteString("  " + tagStyle.Render("H0wZy/mcp") + " " + metaStyle.Render(AppVersion+" • Multi-Agent MCP Hub"))
 	sb.WriteString("\n")
 	sb.WriteString("  " + metaStyle.Render("Claude Code  ↔  OpenAI Codex  ↔  Google Antigravity"))

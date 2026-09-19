@@ -78,8 +78,8 @@ func TestAsciiBannerProperties(t *testing.T) {
 	for i, line := range lines {
 		runeCount := utf8.RuneCountInString(line)
 		t.Logf("Line %d width: %d runes", i, runeCount)
-		if runeCount > 80 {
-			t.Errorf("Line %d exceeds 80-column terminal width limit: %d runes", i, runeCount)
+		if runeCount != 75 {
+			t.Errorf("Line %d expected exactly 75 runes, got: %d runes", i, runeCount)
 		}
 	}
 }

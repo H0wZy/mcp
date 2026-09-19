@@ -5,6 +5,7 @@ import (
 
 	"github.com/H0wZy/mcp/cli/config"
 	"github.com/H0wZy/mcp/cli/detector"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -47,11 +48,17 @@ Supported bridge names:
 		} else if len(args) > 0 {
 			toInstall = append(toInstall, args[0])
 		} else {
-			return fmt.Errorf("please specify a bridge name or use --all (run 'h0wzy-mcp' for interactive mode)")
+			return fmt.Errorf("please specify a bridge name or use --all (run 'hmcp' for interactive mode)")
 		}
 
+		successStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#04B575"))
+		agentStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFFFF"))
+		arrowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#A855F7"))
+		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
+		warnStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFA500"))
+
 		if len(toInstall) == 0 {
-			fmt.Println("No supported bridges detected to install.")
+			fmt.Println(warnStyle.Render("⚠️  No supported bridges detected to install."))
 			return nil
 		}
 
@@ -62,31 +69,55 @@ Supported bridge names:
 				if err := config.RegisterClaudeServerCommand("antigravity", serverCmd, serverArgs, installScope); err != nil {
 					return err
 				}
-				fmt.Printf("✅ Registered: Claude Code -> Google Antigravity (%s scope)\n", installScope)
+				fmt.Printf("  %s Connected: %s %s %s %s\n",
+					successStyle.Render("✓"),
+					agentStyle.Render("Claude Code"),
+					arrowStyle.Render("↔"),
+					agentStyle.Render("Google Antigravity"),
+					dimStyle.Render("("+installScope+" scope)"),
+				)
 			case "claude-codex":
 				serverCmd, serverArgs := config.ResolveServerScript("codex")
 				if err := config.RegisterClaudeServerCommand("codex", serverCmd, serverArgs, installScope); err != nil {
 					return err
 				}
-				fmt.Printf("✅ Registered: Claude Code -> OpenAI Codex (%s scope)\n", installScope)
+				fmt.Printf("  %s Connected: %s %s %s %s\n",
+					successStyle.Render("✓"),
+					agentStyle.Render("Claude Code"),
+					arrowStyle.Render("↔"),
+					agentStyle.Render("OpenAI Codex"),
+					dimStyle.Render("("+installScope+" scope)"),
+				)
 			case "codex-antigravity":
 				serverCmd, serverArgs := config.ResolveServerScript("antigravity")
 				if err := config.RegisterCodexServerCommand("antigravity", serverCmd, serverArgs); err != nil {
 					return err
 				}
-				fmt.Println("✅ Registered: OpenAI Codex -> Google Antigravity")
+				fmt.Printf("  %s Connected: %s %s %s\n",
+					successStyle.Render("✓"),
+					agentStyle.Render("OpenAI Codex"),
+					arrowStyle.Render("↔"),
+					agentStyle.Render("Google Antigravity"),
+				)
 			case "antigravity-codex":
 				serverCmd, serverArgs := config.ResolveServerScript("codex")
 				if err := config.RegisterAntigravityServerCommand("codex", serverCmd, serverArgs); err != nil {
 					return err
 				}
-				fmt.Println("✅ Registered: Google Antigravity -> OpenAI Codex")
+				fmt.Printf("  %s Connected: %s %s %s\n",
+					successStyle.Render("✓"),
+					agentStyle.Render("Google Antigravity"),
+					arrowStyle.Render("↔"),
+					agentStyle.Render("OpenAI Codex"),
+				)
 			default:
 				return fmt.Errorf("unknown bridge: %s", bridge)
 			}
 		}
 
-		fmt.Println("\nConfiguration complete. Restart your host agent CLI to use the tools.")
+		fmt.Println()
+		fmt.Println(successStyle.Render("✅ Configuration complete!"))
+		fmt.Println(dimStyle.Render("💡 Restart your host agent CLI to activate the newly connected tools."))
 		return nil
 	},
 }

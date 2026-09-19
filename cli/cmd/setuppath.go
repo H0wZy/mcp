@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -22,6 +23,14 @@ so that you can run 'hmcp', 'hwzmcp', or 'h0wzy-mcp' from any terminal without f
 		if err != nil {
 			return err
 		}
+
+		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#C084FC"))
+		successStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#04B575"))
+		bulletStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#04B575"))
+		aliasStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFFFF"))
+		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
+		warnStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFA500"))
+		codeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#38BDF8"))
 
 		// Prefer ~/.local/bin as standard cross-platform user bin directory
 		targetDir := filepath.Join(home, ".local", "bin")
@@ -46,7 +55,7 @@ so that you can run 'hmcp', 'hwzmcp', or 'h0wzy-mcp' from any terminal without f
 				mainExe = filepath.Join(targetDir, "hmcp")
 			}
 
-			fmt.Println("Compiling native binary to user bin directory...")
+			fmt.Println(dimStyle.Render("Compiling native binary to user bin directory..."))
 			buildCmd := exec.Command("go", "build", "-o", mainExe, "./cli")
 			buildCmd.Stdout = os.Stdout
 			buildCmd.Stderr = os.Stderr
@@ -90,21 +99,24 @@ so that you can run 'hmcp', 'hwzmcp', or 'h0wzy-mcp' from any terminal without f
 			}
 		}
 
-		fmt.Printf("✅ Installed binary aliases in: %s\n", targetDir)
+		fmt.Println(titleStyle.Render("🚀 PATH Configuration"))
+		fmt.Printf("  %s Installed binary shims in: %s\n", successStyle.Render("✓"), dimStyle.Render(targetDir))
 		for _, a := range aliases {
-			fmt.Printf("   • %s\n", a)
+			fmt.Printf("    %s %s\n", bulletStyle.Render("•"), aliasStyle.Render(a))
 		}
 
 		if inPath {
-			fmt.Println("\n🎉 Ready! You can immediately run 'hmcp' in any terminal window.")
+			fmt.Println()
+			fmt.Println(successStyle.Render("🎉 Ready! You can immediately run 'hmcp' in any terminal window."))
 		} else {
-			fmt.Printf("\n⚠️ Notice: %s was not found in your current PATH.\n", targetDir)
+			fmt.Println()
+			fmt.Printf("%s Notice: %s was not found in your current PATH.\n", warnStyle.Render("⚠️"), targetDir)
 			if runtime.GOOS == "windows" {
-				fmt.Println("   To add it permanently to your User PATH, run in PowerShell:")
-				fmt.Printf("   [Environment]::SetEnvironmentVariable('PATH', [Environment]::GetEnvironmentVariable('PATH', 'User') + ';%s', 'User')\n", targetDir)
+				fmt.Println(dimStyle.Render("   To add it permanently to your User PATH, run in PowerShell:"))
+				fmt.Println("   " + codeStyle.Render(fmt.Sprintf("[Environment]::SetEnvironmentVariable('PATH', [Environment]::GetEnvironmentVariable('PATH', 'User') + ';%s', 'User')", targetDir)))
 			} else {
-				fmt.Println("   Add this line to your ~/.bashrc or ~/.zshrc:")
-				fmt.Printf("   export PATH=\"%s:$PATH\"\n", targetDir)
+				fmt.Println(dimStyle.Render("   Add this line to your ~/.bashrc or ~/.zshrc:"))
+				fmt.Println("   " + codeStyle.Render(fmt.Sprintf("export PATH=\"%s:$PATH\"", targetDir)))
 			}
 		}
 
