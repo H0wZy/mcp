@@ -29,16 +29,20 @@ jobs:
 
       - name: Publish @h0wzy/mcp-shared
         run: npm publish ./shared --access public --provenance
-        continue-on-error: true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @h0wzy/mcp-server-antigravity
         run: npm publish ./servers/antigravity --access public --provenance
-        continue-on-error: true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @h0wzy/mcp-server-codex
         run: npm publish ./servers/codex --access public --provenance
-        continue-on-error: true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @h0wzy/mcp
         run: npm publish ./npm --access public --provenance
-        continue-on-error: true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

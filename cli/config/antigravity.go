@@ -47,11 +47,11 @@ func RegisterAntigravityServerCommand(name, command string, args []string) error
 		return fmt.Errorf("failed to serialize antigravity config: %w", err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(cfgPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(cfgPath), 0700); err != nil {
 		return err
 	}
 
-	return os.WriteFile(cfgPath, out, 0644)
+	return os.WriteFile(cfgPath, out, 0600)
 }
 
 func RegisterAntigravityServer(name, serverCliPath string) error {
@@ -86,5 +86,5 @@ func UnregisterAntigravityServer(name string) error {
 		return err
 	}
 
-	return os.WriteFile(cfgPath, out, 0644)
+	return os.WriteFile(cfgPath, out, 0600)
 }

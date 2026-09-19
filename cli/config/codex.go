@@ -49,11 +49,11 @@ func RegisterCodexServerCommand(name, command string, args []string) error {
 		}
 	}
 
-	if err := os.MkdirAll(filepath.Dir(cfgPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(cfgPath), 0700); err != nil {
 		return err
 	}
 
-	return os.WriteFile(cfgPath, []byte(updated), 0644)
+	return os.WriteFile(cfgPath, []byte(updated), 0600)
 }
 
 func RegisterCodexServer(name, serverCliPath string) error {
@@ -74,5 +74,5 @@ func UnregisterCodexServer(name string) error {
 	re := regexp.MustCompile(fmt.Sprintf(`(?ms)^\[mcp_servers\.%s\].*?(?=^\[|\z)`, regexp.QuoteMeta(name)))
 	updated := re.ReplaceAllString(string(b), "")
 
-	return os.WriteFile(cfgPath, []byte(strings.TrimSpace(updated)+"\n"), 0644)
+	return os.WriteFile(cfgPath, []byte(strings.TrimSpace(updated)+"\n"), 0600)
 }

@@ -43,6 +43,30 @@ export function isAuthError(text) {
 }
 
 /**
+ * Sanitizes potentially sensitive tokens, keys, and credentials from error outputs
+ * to prevent accidental token leakage to MCP clients or chat histories.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+export function sanitizeOutput(text) {
+  if (!text) return '';
+  return text
+    // OpenAI API keys: sk-...
+    .replace(/sk-[a-zA-Z0-9_-]{20,}/g, '[REDACTED_OPENAI_KEY]')
+    // Google / Gemini API keys: AIza...
+    .replace(/AIza[0-9A-Za-z_-]{30,}/g, '[REDACTED_GOOGLE_KEY]')
+    // GitHub tokens: ghp_..., gho_..., ghu_..., ghs_..., ghr_...
+    .replace(/gh[pousr]_[a-zA-Z0-9]{36}/g, '[REDACTED_GITHUB_TOKEN]')
+    // NPM tokens: npm_...
+    .replace(/npm_[a-zA-Z0-9]{36}/g, '[REDACTED_NPM_TOKEN]')
+    // Bearer tokens & JWTs in headers or text
+    .replace(/(Bearer\s+)[a-zA-Z0-9_.-]{20,}/gi, '$1[REDACTED_BEARER_TOKEN]')
+    // Query params or env vars with secrets: password=..., token=..., key=...
+    .replace(/((?:password|secret|token|api_?key|auth)\s*[=:]\s*)[^\s&,;]+/gi, '$1[REDACTED]');
+}
+
+/**
  * Formats a provider error into a resilient MCP tool response that allows
  * the calling host agent (e.g. Claude Code) to smoothly degrade or inform the user
  * without aborting the session.
@@ -54,26 +78,26 @@ export function isAuthError(text) {
  * @returns {{ text: string, isError: boolean }}
  */
 export function formatResilientResponse({ provider, rawOutput, exitCode }) {
-  const text = (rawOutput || '').trim();
+  const sanitized = sanitizeOutput((rawOutput || '').trim());
 
-  if (isRateLimitError(text)) {
+  if (isRateLimitError(sanitized)) {
     return {
       isError: true,
       text:
         `⚠️ [${provider} Rate Limit / Quota Exhausted]\n` +
         `The external provider returned a 429 / Resource Exhausted error:\n\n` +
-        `${text}\n\n` +
+        `${sanitized}\n\n` +
         `💡 Fallback guidance for Host Agent: Do not retry immediately. Fall back to your internal reasoning to fulfill the user request, or inform the user that their ${provider} quota has been reached.`,
     };
   }
 
-  if (isAuthError(text)) {
+  if (isAuthError(sanitized)) {
     return {
       isError: true,
       text:
         `🔑 [${provider} Authentication Required]\n` +
         `The CLI is not authenticated or the login session has expired:\n\n` +
-        `${text}\n\n` +
+        `${sanitized}\n\n` +
         `💡 Guidance: Please sign in or check your local credentials for ${provider}.`,
     };
   }
@@ -82,6 +106,6 @@ export function formatResilientResponse({ provider, rawOutput, exitCode }) {
     isError: true,
     text:
       `❌ [${provider} Execution Error (exit code ${exitCode ?? 'unknown'})]\n\n` +
-      `${text || '(No output produced)'}`,
+      `${sanitized || '(No output produced)'}`,
   };
 }

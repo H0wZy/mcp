@@ -1,8 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isRateLimitError, isAuthError, formatResilientResponse } from '../shared/errors.js';
+import { isRateLimitError, isAuthError, formatResilientResponse, sanitizeOutput } from '../shared/errors.js';
 import { createServer as createAntigravityServer } from '../servers/antigravity/src/index.js';
 import { createServer as createCodexServer } from '../servers/codex/src/index.js';
+
+test('sanitizeOutput scrubs OpenAI, Google, GitHub, NPM, and Bearer tokens', () => {
+  const input =
+    'Error 401: Invalid key sk-proj-1234567890abcdef1234567890 with Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9 ' +
+    'and Google AIzaSyD1234567890abcdef1234567890abcde or ghp_1234567890abcdef1234567890abcdef1234 and npm_1234567890abcdef1234567890abcdef1234';
+
+  const sanitized = sanitizeOutput(input);
+  assert.equal(sanitized.includes('sk-proj-1234567890abcdef1234567890'), false);
+  assert.equal(sanitized.includes('AIzaSyD1234567890abcdef1234567890abcde'), false);
+  assert.equal(sanitized.includes('ghp_1234567890abcdef1234567890abcdef1234'), false);
+  assert.equal(sanitized.includes('npm_1234567890abcdef1234567890abcdef1234'), false);
+  assert.equal(sanitized.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'), false);
+  assert.match(sanitized, /\[REDACTED_OPENAI_KEY\]/);
+  assert.match(sanitized, /\[REDACTED_GOOGLE_KEY\]/);
+  assert.match(sanitized, /\[REDACTED_GITHUB_TOKEN\]/);
+  assert.match(sanitized, /\[REDACTED_NPM_TOKEN\]/);
+  assert.match(sanitized, /\[REDACTED_BEARER_TOKEN\]/);
+});
 
 test('isRateLimitError detects various provider rate limit messages', () => {
   const samples = [

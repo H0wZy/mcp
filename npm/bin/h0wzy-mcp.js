@@ -4,7 +4,7 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { existsSync, mkdirSync, createWriteStream, chmodSync } from 'node:fs';
+import { existsSync, mkdirSync, createWriteStream, chmodSync, renameSync, unlinkSync } from 'node:fs';
 import { homedir, platform, arch } from 'node:os';
 import https from 'node:https';
 
@@ -39,7 +39,7 @@ const args = process.argv.slice(2);
 
 // 1. Check local checkout compiled binary
 if (binaryAsset && existsSync(join(cliDir, binaryAsset))) {
-  const res = spawnSync(join(cliDir, binaryAsset), args, { stdio: 'inherit', shell: isWindows });
+  const res = spawnSync(join(cliDir, binaryAsset), args, { stdio: 'inherit' });
   process.exit(res.status ?? 0);
 }
 
@@ -48,7 +48,6 @@ if (existsSync(join(cliDir, 'main.go'))) {
   const resGo = spawnSync('go', ['run', './cli', ...args], {
     cwd: repoRoot,
     stdio: 'inherit',
-    shell: isWindows,
   });
   if (!resGo.error && resGo.status === 0) {
     process.exit(0);
@@ -65,26 +64,40 @@ const cacheDir = join(homedir(), '.h0wzy', 'bin');
 const cachedBinary = join(cacheDir, `${binaryAsset}-v${VERSION}`);
 
 if (existsSync(cachedBinary)) {
-  const res = spawnSync(cachedBinary, args, { stdio: 'inherit', shell: isWindows });
+  const res = spawnSync(cachedBinary, args, { stdio: 'inherit' });
   process.exit(res.status ?? 0);
 }
 
-// Helper to download binary with redirect support
+// Helper to download binary with redirect support and atomic rename
 async function downloadBinary(url, dest) {
+  const tempDest = `${dest}.tmp-${Date.now()}`;
   return new Promise((resolve, reject) => {
-    https.get(url, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        return downloadBinary(res.headers.location, dest).then(resolve).catch(reject);
-      }
-      if (res.statusCode !== 200) {
-        return reject(new Error(`Download failed with status ${res.statusCode}`));
-      }
-      const file = createWriteStream(dest);
-      res.pipe(file);
-      file.on('finish', () => {
-        file.close(() => resolve());
+    function getUrl(currentUrl) {
+      https.get(currentUrl, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          return getUrl(res.headers.location);
+        }
+        if (res.statusCode !== 200) {
+          return reject(new Error(`Download failed with status ${res.statusCode}`));
+        }
+        const file = createWriteStream(tempDest);
+        res.pipe(file);
+        file.on('finish', () => {
+          file.close(() => {
+            try {
+              renameSync(tempDest, dest);
+              resolve();
+            } catch (err) {
+              reject(err);
+            }
+          });
+        });
+      }).on('error', (err) => {
+        try { if (existsSync(tempDest)) unlinkSync(tempDest); } catch {}
+        reject(err);
       });
-    }).on('error', reject);
+    }
+    getUrl(url);
   });
 }
 
@@ -99,7 +112,7 @@ async function run() {
       chmodSync(cachedBinary, 0o755);
     }
     console.log('✅ Download complete! Starting CLI...\n');
-    const res = spawnSync(cachedBinary, args, { stdio: 'inherit', shell: isWindows });
+    const res = spawnSync(cachedBinary, args, { stdio: 'inherit' });
     process.exit(res.status ?? 0);
   } catch (err) {
     console.error(`❌ Could not download prebuilt binary: ${err.message}`);
