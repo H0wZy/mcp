@@ -21,13 +21,13 @@ on:
 jobs:
   validate:
     name: 🔍 Validate Formats & Syntax
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -55,14 +55,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        node-version: [20.x, 22.x]
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+        node-version: [20.x, 22.x, 24.x]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
 
@@ -82,15 +82,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-latest, macos-latest]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: 'stable'
+          cache-dependency-path: 'cli/go.sum'
 
       - name: Run Go Unit Tests
         run: go test -v ./cli/...
@@ -104,15 +105,16 @@ jobs:
   build-cli:
     name: 📦 Build Multi-Platform CLI Binaries
     needs: [test-servers, test-cli]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: 'stable'
+          cache-dependency-path: 'cli/go.sum'
 
       - name: Compile Windows amd64 Binary
         run: env GOOS=windows GOARCH=amd64 go build -o dist/h0wzy-mcp-windows-amd64.exe ./cli
@@ -127,7 +129,7 @@ jobs:
         run: env GOOS=darwin GOARCH=amd64 go build -o dist/h0wzy-mcp-darwin-amd64 ./cli
 
       - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: h0wzy-mcp-binaries
           path: dist/*
@@ -142,13 +144,13 @@ jobs:
   verify-package:
     name: 🚀 Verify Distribution & npm Package
     needs: [build-cli]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
 
