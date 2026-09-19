@@ -13,6 +13,7 @@ jobs:
   publish-packages:
     name: 🚀 Publish Packages to npmjs.com
     runs-on: ubuntu-24.04
+    environment: .env
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
