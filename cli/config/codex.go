@@ -16,7 +16,7 @@ func getCodexConfigPath() (string, error) {
 	return filepath.Join(home, ".codex", "config.toml"), nil
 }
 
-func RegisterCodexServer(name, serverCliPath string) error {
+func RegisterCodexServerCommand(name, command string, args []string) error {
 	cfgPath, err := getCodexConfigPath()
 	if err != nil {
 		return err
@@ -27,9 +27,12 @@ func RegisterCodexServer(name, serverCliPath string) error {
 		content = string(b)
 	}
 
-	serverCliPath = filepath.ToSlash(serverCliPath)
+	argsFormatted := make([]string, len(args))
+	for i, a := range args {
+		argsFormatted[i] = fmt.Sprintf("%q", filepath.ToSlash(a))
+	}
 	sectionHeader := fmt.Sprintf("[mcp_servers.%s]", name)
-	newBlock := fmt.Sprintf("%s\ncommand = \"node\"\nargs = [\"%s\"]\n", sectionHeader, serverCliPath)
+	newBlock := fmt.Sprintf("%s\ncommand = %q\nargs = [%s]\n", sectionHeader, command, strings.Join(argsFormatted, ", "))
 
 	// Regex to match existing [mcp_servers.<name>] block up to next section or EOF
 	re := regexp.MustCompile(fmt.Sprintf(`(?ms)^\[mcp_servers\.%s\].*?(?=^\[|\z)`, regexp.QuoteMeta(name)))
@@ -51,6 +54,10 @@ func RegisterCodexServer(name, serverCliPath string) error {
 	}
 
 	return os.WriteFile(cfgPath, []byte(updated), 0644)
+}
+
+func RegisterCodexServer(name, serverCliPath string) error {
+	return RegisterCodexServerCommand(name, "node", []string{filepath.ToSlash(serverCliPath)})
 }
 
 func UnregisterCodexServer(name string) error {

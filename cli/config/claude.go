@@ -29,7 +29,7 @@ func getClaudeConfigPath(scope string) (string, error) {
 	return filepath.Join(home, ".claude.json"), nil
 }
 
-func RegisterClaudeServer(name, serverCliPath, scope string) error {
+func RegisterClaudeServerCommand(name, command string, args []string, scope string) error {
 	cfgPath, err := getClaudeConfigPath(scope)
 	if err != nil {
 		return err
@@ -48,8 +48,8 @@ func RegisterClaudeServer(name, serverCliPath, scope string) error {
 
 	mcpServers[name] = map[string]interface{}{
 		"type":    "stdio",
-		"command": "node",
-		"args":    []string{filepath.ToSlash(serverCliPath)},
+		"command": command,
+		"args":    args,
 	}
 
 	out, err := json.MarshalIndent(data, "", "  ")
@@ -62,6 +62,10 @@ func RegisterClaudeServer(name, serverCliPath, scope string) error {
 	}
 
 	return os.WriteFile(cfgPath, out, 0644)
+}
+
+func RegisterClaudeServer(name, serverCliPath, scope string) error {
+	return RegisterClaudeServerCommand(name, "node", []string{filepath.ToSlash(serverCliPath)}, scope)
 }
 
 func UnregisterClaudeServer(name, scope string) error {

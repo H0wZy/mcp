@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/H0wZy/mcp/cli/config"
 	"github.com/H0wZy/mcp/cli/detector"
@@ -25,14 +23,6 @@ Supported bridge names:
   codex-antigravity   (Connects OpenAI Codex to Google Antigravity)
   antigravity-codex   (Connects Google Antigravity to OpenAI Codex)`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		repoRoot, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-
-		antigravityServerPath := filepath.Join(repoRoot, "servers", "antigravity", "bin", "cli.js")
-		codexServerPath := filepath.Join(repoRoot, "servers", "codex", "bin", "cli.js")
-
 		var toInstall []string
 
 		if installAll {
@@ -68,22 +58,26 @@ Supported bridge names:
 		for _, bridge := range toInstall {
 			switch bridge {
 			case "claude-antigravity":
-				if err := config.RegisterClaudeServer("antigravity", antigravityServerPath, installScope); err != nil {
+				serverCmd, serverArgs := config.ResolveServerScript("antigravity")
+				if err := config.RegisterClaudeServerCommand("antigravity", serverCmd, serverArgs, installScope); err != nil {
 					return err
 				}
 				fmt.Printf("✅ Registered: Claude Code -> Google Antigravity (%s scope)\n", installScope)
 			case "claude-codex":
-				if err := config.RegisterClaudeServer("codex", codexServerPath, installScope); err != nil {
+				serverCmd, serverArgs := config.ResolveServerScript("codex")
+				if err := config.RegisterClaudeServerCommand("codex", serverCmd, serverArgs, installScope); err != nil {
 					return err
 				}
 				fmt.Printf("✅ Registered: Claude Code -> OpenAI Codex (%s scope)\n", installScope)
 			case "codex-antigravity":
-				if err := config.RegisterCodexServer("antigravity", antigravityServerPath); err != nil {
+				serverCmd, serverArgs := config.ResolveServerScript("antigravity")
+				if err := config.RegisterCodexServerCommand("antigravity", serverCmd, serverArgs); err != nil {
 					return err
 				}
 				fmt.Println("✅ Registered: OpenAI Codex -> Google Antigravity")
 			case "antigravity-codex":
-				if err := config.RegisterAntigravityServer("codex", codexServerPath); err != nil {
+				serverCmd, serverArgs := config.ResolveServerScript("codex")
+				if err := config.RegisterAntigravityServerCommand("codex", serverCmd, serverArgs); err != nil {
 					return err
 				}
 				fmt.Println("✅ Registered: Google Antigravity -> OpenAI Codex")

@@ -15,7 +15,7 @@ func getAntigravityConfigPath() (string, error) {
 	return filepath.Join(home, ".gemini", "config", "mcp_config.json"), nil
 }
 
-func RegisterAntigravityServer(name, serverCliPath string) error {
+func RegisterAntigravityServerCommand(name, command string, args []string) error {
 	cfgPath, err := getAntigravityConfigPath()
 	if err != nil {
 		return err
@@ -32,9 +32,14 @@ func RegisterAntigravityServer(name, serverCliPath string) error {
 		data["mcpServers"] = mcpServers
 	}
 
+	formattedArgs := make([]string, len(args))
+	for i, a := range args {
+		formattedArgs[i] = filepath.ToSlash(a)
+	}
+
 	mcpServers[name] = map[string]interface{}{
-		"command": "node",
-		"args":    []string{filepath.ToSlash(serverCliPath)},
+		"command": command,
+		"args":    formattedArgs,
 	}
 
 	out, err := json.MarshalIndent(data, "", "  ")
@@ -47,6 +52,10 @@ func RegisterAntigravityServer(name, serverCliPath string) error {
 	}
 
 	return os.WriteFile(cfgPath, out, 0644)
+}
+
+func RegisterAntigravityServer(name, serverCliPath string) error {
+	return RegisterAntigravityServerCommand(name, "node", []string{filepath.ToSlash(serverCliPath)})
 }
 
 func UnregisterAntigravityServer(name string) error {
