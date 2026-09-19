@@ -7,12 +7,13 @@ on:
 
 permissions:
   contents: read
-  id-token: write # Required for npm Trusted Publishing via OIDC
+  id-token: write # Required for npm Trusted Publishing & Provenance
 
 jobs:
   publish-packages:
     name: 🚀 Publish Packages to npmjs.com
     runs-on: ubuntu-24.04
+    environment: .env
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -24,17 +25,25 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Publish @h0wzy/mcp-shared
-        run: npm publish ./shared --provenance
+        run: npm publish ./shared --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
 
       - name: Publish @h0wzy/mcp-server-antigravity
-        run: npm publish ./servers/antigravity --provenance
+        run: npm publish ./servers/antigravity --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
 
       - name: Publish @h0wzy/mcp-server-codex
-        run: npm publish ./servers/codex --provenance
+        run: npm publish ./servers/codex --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
 
       - name: Publish @h0wzy/mcp
-        run: npm publish ./npm --provenance
+        run: npm publish ./npm --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
