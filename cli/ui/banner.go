@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	AppVersion  = "v1.0.2"
+	AppVersion  = "v1.0.3"
 	BannerWidth = 75
 )
 
