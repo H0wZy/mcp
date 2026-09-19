@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, createWriteStream, chmodSync } from 'node:fs';
 import { homedir, platform, arch } from 'node:os';
 import https from 'node:https';
 
-const VERSION = '1.0.1';
+const VERSION = '1.0.2';
 const GITHUB_REPO = 'H0wZy/mcp';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

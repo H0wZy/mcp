@@ -5,6 +5,7 @@ import (
 
 	"github.com/H0wZy/mcp/cli/config"
 	"github.com/H0wZy/mcp/cli/detector"
+	"github.com/H0wZy/mcp/cli/version"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -25,6 +26,12 @@ var (
 
 func RunInteractive() error {
 	PrintBanner()
+
+	if info, err := version.CheckForUpdate(false); err == nil && info != nil && info.UpdateAvailable {
+		if notice := version.RenderNotice(info); notice != "" {
+			fmt.Println(notice)
+		}
+	}
 
 	// 1. Scan environment
 	fmt.Println("Scanning local AI developer CLIs...")

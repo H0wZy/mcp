@@ -79,21 +79,22 @@ Choose your preferred way to run H0wZy/mcp:
 # 1. Instant execution via npx (Zero setup):
 npx @h0wzy/mcp
 
-# 2. Or install globally via npm:
+# 2. Or install globally via npm (provides 'hmcp', 'hwzmcp', and 'h0wzy-mcp'):
 npm install -g @h0wzy/mcp
-h0wzy-mcp
+hmcp
 
-# 3. Or directly with Go:
-go run ./cli
+# 3. Or directly from source with Go:
+go run ./cli setup-path
+hmcp
 ```
 
-#### 📦 Precompiled Standalone Binaries (v1.0.1)
+#### 📦 Precompiled Standalone Binaries (v1.0.2)
 
 Download zero-dependency native binaries directly from [Releases](https://github.com/H0wZy/mcp/releases):
-- 🪟 **Windows (`amd64`):** [`h0wzy-mcp-windows-amd64.exe`](https://github.com/H0wZy/mcp/releases/download/v1.0.1/h0wzy-mcp-windows-amd64.exe)
-- 🐧 **Linux (`amd64`):** [`h0wzy-mcp-linux-amd64`](https://github.com/H0wZy/mcp/releases/download/v1.0.1/h0wzy-mcp-linux-amd64)
-- 🍏 **macOS Apple Silicon (`arm64`):** [`h0wzy-mcp-darwin-arm64`](https://github.com/H0wZy/mcp/releases/download/v1.0.1/h0wzy-mcp-darwin-arm64)
-- 🍏 **macOS Intel (`amd64`):** [`h0wzy-mcp-darwin-amd64`](https://github.com/H0wZy/mcp/releases/download/v1.0.1/h0wzy-mcp-darwin-amd64)
+- 🪟 **Windows (`amd64`):** [`h0wzy-mcp-windows-amd64.exe`](https://github.com/H0wZy/mcp/releases/download/v1.0.2/h0wzy-mcp-windows-amd64.exe)
+- 🐧 **Linux (`amd64`):** [`h0wzy-mcp-linux-amd64`](https://github.com/H0wZy/mcp/releases/download/v1.0.2/h0wzy-mcp-linux-amd64)
+- 🍏 **macOS Apple Silicon (`arm64`):** [`h0wzy-mcp-darwin-arm64`](https://github.com/H0wZy/mcp/releases/download/v1.0.2/h0wzy-mcp-darwin-arm64)
+- 🍏 **macOS Intel (`amd64`):** [`h0wzy-mcp-darwin-amd64`](https://github.com/H0wZy/mcp/releases/download/v1.0.2/h0wzy-mcp-darwin-amd64)
 
 The CLI will scan your system:
 ```text
@@ -116,38 +117,52 @@ Scanning local AI developer CLIs...
 
 ---
 
-### 2. Headless CLI Commands
+### 2. Commands & Management
 
 ```bash
-# Diagnose local environment, paths, and communication health
-h0wzy-mcp doctor
+# Check version and verify if updates are available
+hmcp version
+
+# Upgrade hmcp to latest release (or 'hmcp update')
+hmcp upgrade
+
+# Setup PATH and shims (~/.local/bin) so 'hmcp' works everywhere
+hmcp setup-path
+
+# Diagnose local environment, paths, and agent communication health
+hmcp doctor
 
 # Diagnose and output as JSON
-h0wzy-mcp doctor --json
+hmcp doctor --json
 
 # Install all supported integrations automatically
-h0wzy-mcp install --all
+hmcp install --all
 
 # Install a specific bridge globally or locally
-h0wzy-mcp install claude-antigravity --scope user
-h0wzy-mcp install claude-codex --scope project
+hmcp install claude-antigravity --scope user
+hmcp install claude-codex --scope project
 
 # List available bridges
-h0wzy-mcp list
+hmcp list
 
 # Remove an integration
-h0wzy-mcp remove claude-antigravity
+hmcp remove claude-antigravity
 ```
 
 ---
 
-## 🔌 Available MCP Tools
+## 🔌 Available MCP Tools (Symmetrical Parity)
 
-| Bridge | Tool Name | Description |
+| Provider | Tool Name | Description |
 | :--- | :--- | :--- |
-| **Antigravity** | `ask_antigravity` | Get an independent second opinion or code review from Gemini 3.1 Pro / Flash |
-| **Codex** | `ask_codex` | Cross-verification with OpenAI Codex (GPT-5.6 / GPT-6 Astra) |
+| **Antigravity** | `ask_antigravity` | Independent second opinion or general inquiry from Gemini 3.1 Pro / Flash |
+| **Antigravity** | `review_antigravity` | Comprehensive code & security review inspecting correctness, edge cases, and diffs |
+| **Antigravity** | `brainstorm_antigravity` | Architectural exploration, trade-offs, and design patterns with Gemini |
+| **Antigravity** | `plan_antigravity` | Structured implementation roadmaps and dependency-ordered execution steps |
+| **Codex** | `ask_codex` | Cross-verification with OpenAI Codex (GPT-5.6 Terra / GPT-6 Astra) |
 | **Codex** | `review_codex` | Structured repository code review from OpenAI Codex |
+| **Codex** | `brainstorm_codex` | Architectural exploration, trade-offs, and system design ideation with Codex |
+| **Codex** | `plan_codex` | Step-by-step implementation planning and checklist generation |
 
 ---
 

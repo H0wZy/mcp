@@ -92,7 +92,7 @@ function queryServer(scriptPath, messages) {
   });
 }
 
-test('Antigravity MCP server answers initialize and lists ask_antigravity', async () => {
+test('Antigravity MCP server answers initialize and lists all 4 tools', async () => {
   const responses = await queryServer('./servers/antigravity/bin/cli.js', [
     { jsonrpc: '2.0', id: 1, method: 'initialize' },
     { jsonrpc: '2.0', id: 2, method: 'tools/list' },
@@ -105,9 +105,13 @@ test('Antigravity MCP server answers initialize and lists ask_antigravity', asyn
   assert.equal(responses[1].id, 2);
   const toolNames = responses[1].result.tools.map((t) => t.name);
   assert.ok(toolNames.includes('ask_antigravity'), 'Must include ask_antigravity');
+  assert.ok(toolNames.includes('review_antigravity'), 'Must include review_antigravity');
+  assert.ok(toolNames.includes('brainstorm_antigravity'), 'Must include brainstorm_antigravity');
+  assert.ok(toolNames.includes('plan_antigravity'), 'Must include plan_antigravity');
+  assert.equal(toolNames.length, 4);
 });
 
-test('Codex MCP server answers initialize and lists ask_codex and review_codex', async () => {
+test('Codex MCP server answers initialize and lists all 4 tools', async () => {
   const responses = await queryServer('./servers/codex/bin/cli.js', [
     { jsonrpc: '2.0', id: 1, method: 'initialize' },
     { jsonrpc: '2.0', id: 2, method: 'tools/list' },
@@ -121,4 +125,7 @@ test('Codex MCP server answers initialize and lists ask_codex and review_codex',
   const toolNames = responses[1].result.tools.map((t) => t.name);
   assert.ok(toolNames.includes('ask_codex'), 'Must include ask_codex');
   assert.ok(toolNames.includes('review_codex'), 'Must include review_codex');
+  assert.ok(toolNames.includes('brainstorm_codex'), 'Must include brainstorm_codex');
+  assert.ok(toolNames.includes('plan_codex'), 'Must include plan_codex');
+  assert.equal(toolNames.length, 4);
 });

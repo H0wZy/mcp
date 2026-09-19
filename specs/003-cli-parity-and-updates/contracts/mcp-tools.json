@@ -1,0 +1,108 @@
+{
+  "servers": {
+    "antigravity": {
+      "tools": [
+        {
+          "name": "ask_antigravity",
+          "description": "Get an INDEPENDENT second opinion or general answer from Google Antigravity (default model: Gemini 3.1 Pro High).",
+          "parameters": {
+            "required": ["prompt"],
+            "properties": {
+              "prompt": { "type": "string" },
+              "paths": { "type": "array", "items": { "type": "string" } },
+              "model": { "type": "string" }
+            }
+          }
+        },
+        {
+          "name": "review_antigravity",
+          "description": "Request a thorough, structured code review from Google Antigravity (Gemini 3.1 Pro High) inspecting correctness, security, performance, and architecture.",
+          "parameters": {
+            "required": ["prompt"],
+            "properties": {
+              "prompt": { "type": "string" },
+              "paths": { "type": "array", "items": { "type": "string" } },
+              "model": { "type": "string" }
+            }
+          }
+        },
+        {
+          "name": "brainstorm_antigravity",
+          "description": "Architectural brainstorming and exploration with Google Antigravity. Explores alternative design patterns, trade-offs, and edge cases.",
+          "parameters": {
+            "required": ["prompt"],
+            "properties": {
+              "prompt": { "type": "string" },
+              "paths": { "type": "array", "items": { "type": "string" } },
+              "model": { "type": "string" }
+            }
+          }
+        },
+        {
+          "name": "plan_antigravity",
+          "description": "Generate a step-by-step implementation plan or execution checklist using Google Antigravity.",
+          "parameters": {
+            "required": ["prompt"],
+            "properties": {
+              "prompt": { "type": "string" },
+              "paths": { "type": "array", "items": { "type": "string" } },
+              "model": { "type": "string" }
+            }
+          }
+        }
+      ]
+    },
+    "codex": {
+      "tools": [
+        {
+          "name": "ask_codex",
+          "description": "Ask OpenAI Codex CLI (default model: GPT-5.6 Terra / GPT-6 Astra) for an independent second opinion or advice.",
+          "parameters": {
+            "required": ["prompt"],
+            "properties": {
+              "prompt": { "type": "string" },
+              "paths": { "type": "array", "items": { "type": "string" } },
+              "model": { "type": "string" }
+            }
+          }
+        },
+        {
+          "name": "review_codex",
+          "description": "Run a structured code review using OpenAI Codex CLI against the repository or specified files.",
+          "parameters": {
+            "required": ["prompt"],
+            "properties": {
+              "prompt": { "type": "string" },
+              "paths": { "type": "array", "items": { "type": "string" } },
+              "model": { "type": "string" }
+            }
+          }
+        },
+        {
+          "name": "brainstorm_codex",
+          "description": "Architectural brainstorming and ideation using OpenAI Codex.",
+          "parameters": {
+            "required": ["prompt"],
+            "properties": {
+              "prompt": { "type": "string" },
+              "paths": { "type": "array", "items": { "type": "string" } },
+              "model": { "type": "string" }
+            }
+          }
+        },
+        {
+          "name": "plan_codex",
+          "description": "Generate a structured implementation plan or checklist using OpenAI Codex.",
+          "parameters": {
+            "required": ["prompt"],
+            "properties": {
+              "prompt": { "type": "string" },
+              "paths": { "type": "array", "items": { "type": "string" } },
+              "model": { "type": "string" }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
-  "name": "@h0wzy/mcp-monorepo",
-  "version": "1.0.1",
+  "name": "h0wzy-mcp",
+  "version": "1.0.2",
   "private": true,
   "type": "module",
   "description": "The Ultimate Multi-Agent MCP Hub & Go CLI connecting Claude Code, OpenAI Codex, and Google Antigravity",

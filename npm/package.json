@@ -1,10 +1,12 @@
 {
   "name": "@h0wzy/mcp",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Interactive CLI runner for H0wZy/mcp — The Ultimate Multi-Agent MCP Hub",
   "type": "module",
   "bin": {
-    "h0wzy-mcp": "bin/h0wzy-mcp.js"
+    "hmcp": "bin/h0wzy-mcp.js",
+    "h0wzy-mcp": "bin/h0wzy-mcp.js",
+    "hwzmcp": "bin/h0wzy-mcp.js"
   },
   "keywords": [
     "mcp",
