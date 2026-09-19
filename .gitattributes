@@ -1,0 +1,8 @@
+# GitHub Linguist language statistics overrides
+# Exclude Archify architecture diagrams and HTML previews from language detection
+*.html linguist-documentation
+specs/** linguist-documentation
+
+# Exclude SpecKit PowerShell generator helper scripts from language detection
+.specify/** linguist-vendored
+*.ps1 linguist-vendored
