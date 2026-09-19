@@ -1,0 +1,10 @@
+H0wZy/mcp - OpenAI Codex Server Bridge
+Original inspiration: codex-mcp-tool (https://github.com/trishchuk/codex-mcp-tool)
+Originally authored by Taras Trishchuk under the MIT License.
+
+Enhanced & Unified for H0wZy/mcp by Marcos (H0wZy):
+- Modularized to speak generic MCP to any client (Claude Code, Antigravity, Cursor, VS Code)
+- Replaced 50-file compilation overhead with native, lightweight ES Modules running directly on Node 20+
+- Universal cross-platform binary resolution (PATHEXT, APPDATA, delimiter)
+- Direct zero-latency local execution
+- Resilient Rate Limit (HTTP 429) and ResourceExhausted handling

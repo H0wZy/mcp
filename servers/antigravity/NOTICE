@@ -1,0 +1,9 @@
+H0wZy/mcp - Google Antigravity Server Bridge
+Original inspiration: antigravity-claude-mcp (https://github.com/arjunthilak05/antigravity-claude-mcp)
+Originally authored by Arjun Thilak under the MIT License.
+
+Enhanced & Unified for H0wZy/mcp by Marcos (H0wZy):
+- Modularized to speak generic MCP to any client (Claude Code, OpenAI Codex, Antigravity IDE, Cursor)
+- Universal cross-platform binary resolution (PATHEXT, LOCALAPPDATA, delimiter)
+- Direct zero-latency local execution
+- Resilient Rate Limit (HTTP 429) and ResourceExhausted handling

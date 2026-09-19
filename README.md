@@ -14,87 +14,135 @@ Cross-model code reviews, independent second opinions, and autonomous multi-agen
 
 ---
 
+## 🏛️ Interactive Architecture Diagram
+
+Explore the full interactive system architecture with Light/Dark themes and semantic tracing:
+👉 **[View Interactive Architecture Diagram](specs/001-multi-agent-mcp-hub/architecture.html)**
+
+---
+
 ## 🌟 Why H0wZy/mcp?
 
-1. **Native Cross-Platform (Zero Windows Glitches):**
-   - Eliminates POSIX-only assumptions like `PATH.split(':')` by utilizing native path delimiters (`;` on Windows, `:` on POSIX).
+1. **DRY Shared Core (`@h0wzy/mcp-shared`):**
+   - Eliminates matrix code duplication across host agents. A single `createMcpServer()` engine manages 100% of JSON-RPC 2.0 stdio protocol handling, error catching, and lifecycle handshakes.
+2. **Native Cross-Platform (Zero Windows Glitches):**
+   - Eliminates POSIX-only bugs like `PATH.split(':')` by utilizing native path delimiters (`;` on Windows, `:` on POSIX).
    - Resolves executable extensions automatically (`.exe`, `.cmd`, `.bat` from `PATHEXT`), finding `agy.exe` and `codex.cmd` without requiring manual environment path overrides.
-2. **Instant Performance (Zero `npx` Latency):**
-   - Directly executes local binaries with sub-millisecond invocation times, removing runtime `npx` cache-checking or network overhead.
-3. **Resilient Rate Limits & Quotas:**
+3. **Instant Performance (Zero `npx` Latency):**
+   - Directly executes local binaries with sub-50ms invocation overhead, removing runtime `npx` network/cache-checking delays.
+4. **Resilient Rate Limits & Quotas:**
    - Gracefully traps HTTP 429 and `ResourceExhausted` provider quota limits, returning structured `{ isError: true }` responses so host agents fall back seamlessly without crashing the session.
-4. **Interactive Go CLI (`h0wzy-mcp`):**
+5. **Interactive Go CLI (`h0wzy-mcp`):**
    - Auto-detects local CLI installations (`claude`, `codex`, `agy`), tests binary health, and guides the user through an interactive checklist to configure MCP connections globally or per-project.
 
 ---
 
-## 🏛️ Monorepo Architecture
+## 📁 Repository Layout
 
 ```text
 H0wZy/mcp/
-├── .github/workflows/          # CI/CD, GoReleaser & cross-platform testing
+├── .github/workflows/          # CI/CD & cross-platform testing
 ├── cli/                        # Interactive CLI in Go (Bubble Tea / Huh)
 │   ├── cmd/                    # Commands: install, doctor, list, remove
 │   ├── detector/               # Discovers local claude, codex, and agy CLIs
-│   ├── config/                 # Read/write ~/.claude.json, ~/.codex/config.toml, etc.
+│   ├── config/                 # Read/write ~/.claude.json, config.toml, etc.
 │   └── ui/                     # Terminal user interface
-├── servers/                    # Decoupled MCP servers
-│   ├── claude/
-│   │   ├── antigravity/        # Claude Code -> Google Antigravity bridge
-│   │   └── codex/              # Claude Code -> Codex CLI bridge
-│   ├── codex/
-│   │   └── antigravity/        # Codex CLI -> Google Antigravity bridge
-│   └── agy/                    # Google Antigravity -> Codex / Claude bridges
-├── shared/                     # Platform resolvers, error handling, logging
+├── servers/                    # Decoupled, host-agnostic MCP servers
+│   ├── antigravity/            # Google Antigravity bridge (Gemini 3.1 Pro / Flash)
+│   ├── codex/                  # OpenAI Codex CLI bridge (GPT-5.6 / GPT-6 Astra)
+│   └── claude/                 # Claude Code bridge
+├── shared/                     # Reusable core (@h0wzy/mcp-shared)
+│   ├── server.js               # createMcpServer() generic JSON-RPC 2.0 stdio engine
+│   ├── executor.js             # Child process runner with timeouts and buffers
+│   ├── resolver.js             # Cross-platform executable resolver
+│   └── errors.js               # Resilient Quota / HTTP 429 error handler
 ├── npm/                        # Lightweight npx runner wrapper
+├── specs/                      # SpecKit feature specs & Archify diagrams
 ├── LICENSE                     # MIT License
-└── package.json                # Workspace configuration
+└── package.json                # Monorepo workspaces configuration
 ```
 
 ---
 
 ## 🚀 Quick Start
 
-### Option 1: Run via `npx` (No installation needed)
+### 1. Interactive Setup (Recommended)
+
+Run directly via `npx` or the Go CLI:
+
 ```bash
+# Via npx:
 npx @h0wzy/mcp
-```
 
-### Option 2: Run via Go CLI
-```bash
-# Clone the monorepo
-git clone https://github.com/H0wZy/mcp.git
-cd mcp
-
-# Run the interactive CLI
+# Or directly with Go:
 go run ./cli
 ```
 
-### Option 3: Headless Commands
-```bash
-# Verify environment health and installed CLIs
-h0wzy-mcp doctor
+The CLI will scan your system:
+```text
+🚀 H0wZy/mcp — Multi-Agent MCP Hub Setup
+Scanning local AI developer CLIs...
+  ✓ Claude Code (C:\Users\...\claude.exe)
+  ✓ OpenAI Codex CLI (C:\Users\...\codex.cmd)
+  ✓ Google Antigravity (C:\Users\...\agy.exe)
 
-# Install all supported integrations automatically
-h0wzy-mcp install --all
+? Select MCP bridges to configure:
+  [x] Claude Code -> Google Antigravity (Gemini 3.1 Pro/Flash)
+  [x] Claude Code -> OpenAI Codex (GPT-5.6 / GPT-6 Astra)
+  [ ] OpenAI Codex -> Google Antigravity (Gemini 3.1)
 
-# Install specific bridge with custom scope (user or local project)
-h0wzy-mcp install claude-antigravity --scope user
+? Configuration Scope: User (Global across all projects)
+? Apply configuration now? Yes
 
-# List installed & available MCP servers
-h0wzy-mcp list
+✅ All selected bridges configured successfully!
 ```
 
 ---
 
-## 🔌 Supported MCP Bridges
+### 2. Headless CLI Commands
 
-| Host Agent | Target Model / CLI | Tool Name | Description |
-| :--- | :--- | :--- | :--- |
-| **Claude Code** | **Google Antigravity** | `ask_antigravity` | Independent second opinion from Gemini 3.1 Pro / Flash |
-| **Claude Code** | **OpenAI Codex** | `ask_codex`, `review_codex` | Cross-verification with GPT-5.6 / GPT-6 Astra |
-| **Codex CLI** | **Google Antigravity** | `ask_antigravity` | Gemini-powered validation inside OpenAI Codex |
-| **Antigravity** | **OpenAI Codex** | `ask_codex` | OpenAI reasoning inside Google Antigravity |
+```bash
+# Diagnose local environment, paths, and communication health
+h0wzy-mcp doctor
+
+# Diagnose and output as JSON
+h0wzy-mcp doctor --json
+
+# Install all supported integrations automatically
+h0wzy-mcp install --all
+
+# Install a specific bridge globally or locally
+h0wzy-mcp install claude-antigravity --scope user
+h0wzy-mcp install claude-codex --scope project
+
+# List available bridges
+h0wzy-mcp list
+
+# Remove an integration
+h0wzy-mcp remove claude-antigravity
+```
+
+---
+
+## 🔌 Available MCP Tools
+
+| Bridge | Tool Name | Description |
+| :--- | :--- | :--- |
+| **Antigravity** | `ask_antigravity` | Get an independent second opinion or code review from Gemini 3.1 Pro / Flash |
+| **Codex** | `ask_codex` | Cross-verification with OpenAI Codex (GPT-5.6 / GPT-6 Astra) |
+| **Codex** | `review_codex` | Structured repository code review from OpenAI Codex |
+
+---
+
+## 🧪 Testing
+
+```bash
+# Run all Node.js MCP server & resilience tests
+npm test
+
+# Run all Go CLI detector & config tests
+go test -v ./cli/...
+```
 
 ---
 

@@ -1,0 +1,15 @@
+{
+  "name": "@h0wzy/mcp",
+  "version": "1.0.0",
+  "description": "Interactive CLI runner for H0wZy/mcp — The Ultimate Multi-Agent MCP Hub",
+  "type": "module",
+  "bin": {
+    "h0wzy-mcp": "./bin/h0wzy-mcp.js"
+  },
+  "author": "Marcos (H0wZy) <h0wzymarcos@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/H0wZy/mcp.git"
+  }
+}

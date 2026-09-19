@@ -2,18 +2,17 @@
   "name": "@h0wzy/mcp-monorepo",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "The Ultimate Multi-Agent MCP Hub & Go CLI connecting Claude Code, OpenAI Codex, and Google Antigravity",
   "author": "Marcos (H0wZy) <h0wzymarcos@gmail.com>",
   "license": "MIT",
   "workspaces": [
-    "servers/*/*",
+    "servers/*",
     "shared",
     "npm"
   ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
-    "clean": "npm run clean --workspaces --if-present"
+    "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=20.0.0"
