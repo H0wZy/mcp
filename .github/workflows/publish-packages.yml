@@ -22,27 +22,18 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 22
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Upgrade npm to latest for Trusted Publishing OIDC
-        run: sudo npm install -g npm@latest
+        run: npm install -g npm@latest
 
       - name: Publish @h0wzy/mcp-shared
         run: npm publish ./shared --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @h0wzy/mcp-server-antigravity
         run: npm publish ./servers/antigravity --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @h0wzy/mcp-server-codex
         run: npm publish ./servers/codex --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @h0wzy/mcp
         run: npm publish ./npm --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
