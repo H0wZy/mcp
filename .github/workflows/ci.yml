@@ -37,6 +37,7 @@ jobs:
           node -e "JSON.parse(require('fs').readFileSync('servers/antigravity/package.json'))"
           node -e "JSON.parse(require('fs').readFileSync('servers/codex/package.json'))"
           node -e "JSON.parse(require('fs').readFileSync('shared/package.json'))"
+          node -e "JSON.parse(require('fs').readFileSync('npm/package.json'))"
           node --check npm/bin/h0wzy-mcp.js
           node --check servers/antigravity/bin/cli.js
           node --check servers/codex/bin/cli.js

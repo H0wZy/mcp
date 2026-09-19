@@ -5,7 +5,7 @@ vendor/
 # Build artifacts
 dist/
 build/
-bin/
+/bin/
 *.exe
 *.exe~
 *.dll
