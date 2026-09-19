@@ -3,8 +3,11 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/H0wZy/mcp/cli/detector"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -28,25 +31,65 @@ var doctorCmd = &cobra.Command{
 			return nil
 		}
 
-		fmt.Println("🏥 H0wZy/mcp Environment Diagnostics")
-		fmt.Println("=====================================")
+		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00ADD8"))
+		dividerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#005F87"))
+		checkStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#04B575"))
+		crossStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#EF4444"))
+		nameStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFFFF"))
+		pathStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#737373"))
+		branchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#525252"))
+		labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
+		latencyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#A855F7"))
+		okStatusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575"))
+		failStatusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444"))
+		successBannerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#04B575"))
+
+		fmt.Println(titleStyle.Render("🏥 H0wZy/mcp Environment Diagnostics"))
+		fmt.Println(dividerStyle.Render(strings.Repeat("─", 45)))
+
 		allOk := true
 		for _, r := range results {
 			if r.Healthy {
-				fmt.Printf("✓ %-20s : %s\n", r.DisplayName, r.Path)
-				fmt.Printf("  └─ Latency: %v | Status: %s\n", r.Latency, r.Message)
+				latencyStr := fmt.Sprintf("%.1fms", float64(r.Latency.Microseconds())/1000.0)
+				if r.Latency >= time.Second {
+					latencyStr = fmt.Sprintf("%.2fs", r.Latency.Seconds())
+				}
+
+				fmt.Printf("%s %-22s %s %s\n",
+					checkStyle.Render("✓"),
+					nameStyle.Render(r.DisplayName),
+					pathStyle.Render(":"),
+					pathStyle.Render(r.Path),
+				)
+				fmt.Printf("  %s %s %s %s %s %s\n",
+					branchStyle.Render("└─"),
+					labelStyle.Render("Latency:"),
+					latencyStyle.Render(latencyStr),
+					branchStyle.Render("|"),
+					labelStyle.Render("Status:"),
+					okStatusStyle.Render(r.Message),
+				)
 			} else {
 				allOk = false
-				fmt.Printf("✗ %-20s : Not Ready\n", r.DisplayName)
-				fmt.Printf("  └─ %s\n", r.Message)
+				fmt.Printf("%s %-22s %s %s\n",
+					crossStyle.Render("✗"),
+					nameStyle.Render(r.DisplayName),
+					pathStyle.Render(":"),
+					failStatusStyle.Render("Not Found / Unreachable"),
+				)
+				fmt.Printf("  %s %s\n",
+					branchStyle.Render("└─"),
+					failStatusStyle.Render(r.Message),
+				)
 			}
 		}
 
 		fmt.Println()
 		if allOk {
-			fmt.Println("✅ All detected CLIs are healthy and ready for multi-agent bridges!")
+			fmt.Println(successBannerStyle.Render("✅ All detected CLIs are healthy and ready for multi-agent bridges!"))
 		} else {
-			fmt.Println("⚠️  Some CLIs are missing or unreachable. Check paths above.")
+			warnStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFA500"))
+			fmt.Println(warnStyle.Render("⚠️  Some CLIs are missing or unreachable. Check paths above."))
 		}
 		return nil
 	},
