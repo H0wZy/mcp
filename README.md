@@ -73,23 +73,27 @@ H0wZy/mcp/
 
 ### 1. Interactive Setup (Recommended)
 
-Run directly via `npx`, prebuilt binaries, or the Go CLI:
+Choose your preferred way to run H0wZy/mcp:
 
 ```bash
-# Via npx runner:
+# 1. Instant execution via npx (Zero setup):
 npx @h0wzy/mcp
 
-# Or directly with Go:
+# 2. Or install globally via npm:
+npm install -g @h0wzy/mcp
+h0wzy-mcp
+
+# 3. Or directly with Go:
 go run ./cli
 ```
 
-#### 📦 Precompiled Standalone Binaries (v1.0.0)
+#### 📦 Precompiled Standalone Binaries (v1.0.1)
 
 Download zero-dependency native binaries directly from [Releases](https://github.com/H0wZy/mcp/releases):
-- 🪟 **Windows (`amd64`):** [`h0wzy-mcp-windows-amd64.exe`](https://github.com/H0wZy/mcp/releases/download/v1.0.0/h0wzy-mcp-windows-amd64.exe)
-- 🐧 **Linux (`amd64`):** [`h0wzy-mcp-linux-amd64`](https://github.com/H0wZy/mcp/releases/download/v1.0.0/h0wzy-mcp-linux-amd64)
-- 🍏 **macOS Apple Silicon (`arm64`):** [`h0wzy-mcp-darwin-arm64`](https://github.com/H0wZy/mcp/releases/download/v1.0.0/h0wzy-mcp-darwin-arm64)
-- 🍏 **macOS Intel (`amd64`):** [`h0wzy-mcp-darwin-amd64`](https://github.com/H0wZy/mcp/releases/download/v1.0.0/h0wzy-mcp-darwin-amd64)
+- 🪟 **Windows (`amd64`):** [`h0wzy-mcp-windows-amd64.exe`](https://github.com/H0wZy/mcp/releases/download/v1.0.1/h0wzy-mcp-windows-amd64.exe)
+- 🐧 **Linux (`amd64`):** [`h0wzy-mcp-linux-amd64`](https://github.com/H0wZy/mcp/releases/download/v1.0.1/h0wzy-mcp-linux-amd64)
+- 🍏 **macOS Apple Silicon (`arm64`):** [`h0wzy-mcp-darwin-arm64`](https://github.com/H0wZy/mcp/releases/download/v1.0.1/h0wzy-mcp-darwin-arm64)
+- 🍏 **macOS Intel (`amd64`):** [`h0wzy-mcp-darwin-amd64`](https://github.com/H0wZy/mcp/releases/download/v1.0.1/h0wzy-mcp-darwin-amd64)
 
 The CLI will scan your system:
 ```text
