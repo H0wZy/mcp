@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "H0wZy/mcp — Multi-Agent Hub & Shared Architecture",
+    "output": "architecture.html",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "orchestration",
+        "label": "TUI Auto-Configuration",
+        "focus": ["dev", "cli", "claude", "codex", "agy"],
+        "note": "The Go CLI discovers local tools and injects zero-config local MCP server paths."
+      },
+      {
+        "id": "mcp-routing",
+        "label": "Cross-Agent Stdio Routing",
+        "focus": ["claude", "codex", "agy", "mcp_core", "bridge_agy", "bridge_codex", "bridge_claude"],
+        "note": "Host agents communicate over standard JSON-RPC 2.0 stdio through the DRY shared engine."
+      },
+      {
+        "id": "resilience-boundary",
+        "label": "Resilience & Cross-Platform",
+        "focus": ["mcp_core", "resolver", "resilience"],
+        "note": "Cross-platform executable resolution and HTTP 429 quota exhaustion guardrails."
+      }
+    ]
+  },
+  "components": [
+    { "id": "dev", "type": "external", "label": "Developer", "sublabel": "Terminal / Shell", "pos": [40, 240], "size": [120, 60] },
+    { "id": "cli", "type": "frontend", "label": "h0wzy-mcp CLI", "sublabel": "Go TUI / Auto-Config", "pos": [210, 240], "size": [140, 64], "tag": "Bubble Tea" },
+    { "id": "claude", "type": "backend", "label": "Claude Code", "sublabel": "Host Agent", "pos": [410, 80], "size": [140, 60] },
+    { "id": "codex", "type": "backend", "label": "OpenAI Codex CLI", "sublabel": "Host Agent", "pos": [410, 240], "size": [140, 60] },
+    { "id": "agy", "type": "backend", "label": "Google Antigravity", "sublabel": "Host Agent", "pos": [410, 400], "size": [140, 60] },
+    { "id": "mcp_core", "type": "messagebus", "label": "createMcpServer()", "sublabel": "JSON-RPC stdio engine", "pos": [680, 236], "size": [160, 68], "tag": "DRY Engine" },
+    { "id": "resolver", "type": "security", "label": "Binary Resolver", "sublabel": "Cross-Platform PATHEXT", "pos": [680, 80], "size": [160, 60] },
+    { "id": "resilience", "type": "security", "label": "Resilience Boundary", "sublabel": "429 & Quota Fallback", "pos": [680, 400], "size": [160, 60] },
+    { "id": "bridge_agy", "type": "cloud", "label": "Antigravity Bridge", "sublabel": "Gemini 3.1 Pro / Flash", "pos": [960, 80], "size": [150, 60], "tag": "servers/antigravity" },
+    { "id": "bridge_codex", "type": "cloud", "label": "Codex Bridge", "sublabel": "GPT-5.6 / GPT-6 Astra", "pos": [960, 240], "size": [150, 60], "tag": "servers/codex" },
+    { "id": "bridge_claude", "type": "cloud", "label": "Claude Bridge", "sublabel": "Claude 3.7 / Opus 4.6", "pos": [960, 400], "size": [150, 60], "tag": "servers/claude" }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Workstation Local Runtime (Zero npx Latency)",
+      "wraps": ["cli", "claude", "codex", "agy", "mcp_core", "resolver", "resilience", "bridge_agy", "bridge_codex", "bridge_claude"]
+    },
+    {
+      "kind": "security-group",
+      "label": "@h0wzy/mcp-shared Engine",
+      "wraps": ["mcp_core", "resolver", "resilience"]
+    }
+  ],
+  "connections": [
+    { "id": "dev-to-cli", "from": "dev", "to": "cli", "label": "runs", "variant": "emphasis" },
+    { "id": "cli-to-claude", "from": "cli", "to": "claude", "label": "configures", "fromSide": "top", "toSide": "left" },
+    { "id": "cli-to-codex", "from": "cli", "to": "codex", "label": "configures" },
+    { "id": "cli-to-agy", "from": "cli", "to": "agy", "label": "configures", "fromSide": "bottom", "toSide": "left" },
+    { "id": "claude-to-core", "from": "claude", "to": "mcp_core", "fromSide": "right", "toSide": "left" },
+    { "id": "codex-to-core", "from": "codex", "to": "mcp_core", "fromSide": "right", "toSide": "left" },
+    { "id": "agy-to-core", "from": "agy", "to": "mcp_core", "fromSide": "right", "toSide": "left" },
+    { "id": "core-to-resolver", "from": "mcp_core", "to": "resolver", "label": "finds CLI", "fromSide": "top", "toSide": "bottom", "variant": "security" },
+    { "id": "core-to-resilience", "from": "mcp_core", "to": "resilience", "label": "guards 429", "fromSide": "bottom", "toSide": "top", "variant": "security", "labelDy": 24 },
+    { "id": "core-to-agy", "from": "mcp_core", "to": "bridge_agy", "fromSide": "right", "toSide": "left" },
+    { "id": "core-to-codex", "from": "mcp_core", "to": "bridge_codex", "fromSide": "right", "toSide": "left" },
+    { "id": "core-to-claude", "from": "mcp_core", "to": "bridge_claude", "fromSide": "right", "toSide": "left" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Interactive Go CLI",
+      "items": [
+        "Auto-detects Claude, Codex, and Antigravity binaries across Windows, Linux, and macOS",
+        "Interactive TUI checklist for instant global or local MCP setup",
+        "Zero manual environment overrides required"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "DRY Shared Core",
+      "items": [
+        "Single createMcpServer() handles 100% of JSON-RPC 2.0 stdio protocol boilerplate",
+        "Cross-platform binary resolution with PATHEXT (.exe, .cmd) support",
+        "Zero npx latency via direct local Node invocation"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Resilient Execution",
+      "items": [
+        "Captures HTTP 429 and ResourceExhausted provider quota limits gracefully",
+        "Returns formatted isError notices so host agents degrade gracefully without session crashes",
+        "Clean MIT-licensed decoupled architecture for community extensions"
+      ]
+    }
+  ]
+}
