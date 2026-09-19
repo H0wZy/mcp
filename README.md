@@ -1,8 +1,11 @@
 # 🚀 H0wZy/mcp — The Ultimate Multi-Agent MCP Hub & Go CLI
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CI Pipeline](https://github.com/H0wZy/mcp/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/H0wZy/mcp/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/H0wZy/mcp?color=04B575&label=release&logo=github)](https://github.com/H0wZy/mcp/releases)
+[![Packages](https://img.shields.io/badge/packages-%40h0wzy%2Fmcp-blue?logo=github)](https://github.com/H0wZy/mcp/packages)
 [![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](cli)
 [![Node Version](https://img.shields.io/badge/Node-20+-339933?logo=node.js)](package.json)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](https://github.com/H0wZy/mcp)
 
 Centralize, enhance, and distribute high-performance **MCP (Model Context Protocol)** servers connecting the world's leading AI developer CLIs:
@@ -11,6 +14,8 @@ Centralize, enhance, and distribute high-performance **MCP (Model Context Protoc
 - **Google Antigravity** (Gemini 3.1 Pro / Flash)
 
 Cross-model code reviews, independent second opinions, and autonomous multi-agent validation — configured effortlessly via an interactive **Golang TUI CLI** and distributed via standalone binaries and `npx @h0wzy/mcp`.
+
+🏷️ `#mcp` `#ai-agents` `#multi-agent` `#antigravity` `#claude-code` `#openai-codex` `#gemini` `#cli` `#go` `#bubbletea` `#tui` `#developer-tools` `#model-context-protocol`
 
 ---
 
@@ -68,15 +73,23 @@ H0wZy/mcp/
 
 ### 1. Interactive Setup (Recommended)
 
-Run directly via `npx` or the Go CLI:
+Run directly via `npx`, prebuilt binaries, or the Go CLI:
 
 ```bash
-# Via npx:
+# Via npx runner:
 npx @h0wzy/mcp
 
 # Or directly with Go:
 go run ./cli
 ```
+
+#### 📦 Precompiled Standalone Binaries (v1.0.0)
+
+Download zero-dependency native binaries directly from [Releases](https://github.com/H0wZy/mcp/releases):
+- 🪟 **Windows (`amd64`):** [`h0wzy-mcp-windows-amd64.exe`](https://github.com/H0wZy/mcp/releases/download/v1.0.0/h0wzy-mcp-windows-amd64.exe)
+- 🐧 **Linux (`amd64`):** [`h0wzy-mcp-linux-amd64`](https://github.com/H0wZy/mcp/releases/download/v1.0.0/h0wzy-mcp-linux-amd64)
+- 🍏 **macOS Apple Silicon (`arm64`):** [`h0wzy-mcp-darwin-arm64`](https://github.com/H0wZy/mcp/releases/download/v1.0.0/h0wzy-mcp-darwin-arm64)
+- 🍏 **macOS Intel (`amd64`):** [`h0wzy-mcp-darwin-amd64`](https://github.com/H0wZy/mcp/releases/download/v1.0.0/h0wzy-mcp-darwin-amd64)
 
 The CLI will scan your system:
 ```text
