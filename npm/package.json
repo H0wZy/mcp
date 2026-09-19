@@ -1,11 +1,23 @@
 {
   "name": "@h0wzy/mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Interactive CLI runner for H0wZy/mcp — The Ultimate Multi-Agent MCP Hub",
   "type": "module",
   "bin": {
     "h0wzy-mcp": "bin/h0wzy-mcp.js"
   },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "antigravity",
+    "codex",
+    "multi-agent",
+    "cli",
+    "ai-agents",
+    "developer-tools",
+    "gemini"
+  ],
   "author": "Marcos (H0wZy) <h0wzymarcos@gmail.com>",
   "license": "MIT",
   "repository": {
