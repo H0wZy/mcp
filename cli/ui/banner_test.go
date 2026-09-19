@@ -58,12 +58,15 @@ func TestSlashedZeroInBanner(t *testing.T) {
 	if len(lines) < 4 {
 		t.Fatalf("Expected banner to have at least 4 lines")
 	}
-	// Row 2 and Row 3 must contain the diagonal slash cut inside the 0
-	if !strings.Contains(lines[2], "█╗") {
-		t.Errorf("Expected row 2 of banner to contain upper slash cut '█╗' in the zero")
+	// Row 1, Row 2 and Row 3 must contain the V2 diagonal cut inside the 0
+	if !strings.Contains(lines[1], "██╔═████╗") {
+		t.Errorf("Expected row 1 of banner to contain V2 cut entry '██╔═████╗'")
 	}
-	if !strings.Contains(lines[3], "█╔╝") {
-		t.Errorf("Expected row 3 of banner to contain lower slash cut '█╔╝' in the zero")
+	if !strings.Contains(lines[2], "██║██╔██║") {
+		t.Errorf("Expected row 2 of banner to contain V2 mid cut '██║██╔██║'")
+	}
+	if !strings.Contains(lines[3], "████╔╝██║") {
+		t.Errorf("Expected row 3 of banner to contain V2 exit cut '████╔╝██║'")
 	}
 }
 
