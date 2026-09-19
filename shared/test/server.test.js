@@ -58,10 +58,16 @@ test('createMcpServer responds to initialize, ping, and tools/list', async () =>
   }
 });
 
-test('resolver finds executables on system', () => {
-  const agy = resolveBinary('agy');
-  assert.ok(agy, 'agy should be resolved');
-  assert.match(agy, /agy(\.exe)?$/i);
+test('resolver finds executables on system or honors override', () => {
+  const nodeBin = resolveBinary('node');
+  assert.ok(nodeBin, 'node executable should be resolved on all platforms');
+  assert.match(nodeBin, /node(\.exe)?$/i);
+
+  // Verify override support
+  process.env.TEST_CUSTOM_BIN = process.execPath;
+  const custom = resolveBinary('custom', 'TEST_CUSTOM_BIN');
+  assert.equal(custom, process.execPath);
+  delete process.env.TEST_CUSTOM_BIN;
 });
 
 test('errors detects rate limits and auth errors', () => {
