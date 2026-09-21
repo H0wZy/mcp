@@ -1,6 +1,6 @@
 {
   "name": "@h0wzy/mcp-shared",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Shared cross-platform utilities, binary resolvers, resilient error handlers, and generic MCP stdio server for H0wZy/mcp",
   "keywords": [
     "mcp",
