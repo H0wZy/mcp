@@ -1,6 +1,6 @@
 {
   "name": "@h0wzy/mcp",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Interactive CLI runner for H0wZy/mcp — The Ultimate Multi-Agent MCP Hub",
   "type": "module",
   "bin": {

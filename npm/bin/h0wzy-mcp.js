@@ -4,14 +4,24 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { existsSync, mkdirSync, createWriteStream, chmodSync, renameSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, createWriteStream, chmodSync, renameSync, unlinkSync, readFileSync } from 'node:fs';
 import { homedir, platform, arch } from 'node:os';
 import https from 'node:https';
 
-const VERSION = '1.0.2';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkgPath = join(__dirname, '..', 'package.json');
+let pkgVersion = '1.0.4';
+try {
+  if (existsSync(pkgPath)) {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+    if (pkg.version) pkgVersion = pkg.version;
+  }
+} catch {}
+
+const VERSION = pkgVersion;
+const FALLBACK_RELEASE = '1.0.3';
 const GITHUB_REPO = 'H0wZy/mcp';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..', '..');
 const cliDir = join(repoRoot, 'cli');
 
@@ -61,12 +71,6 @@ if (!binaryAsset) {
 }
 
 const cacheDir = join(homedir(), '.h0wzy', 'bin');
-const cachedBinary = join(cacheDir, `${binaryAsset}-v${VERSION}`);
-
-if (existsSync(cachedBinary)) {
-  const res = spawnSync(cachedBinary, args, { stdio: 'inherit' });
-  process.exit(res.status ?? 0);
-}
 
 // Helper to download binary with redirect support and atomic rename
 async function downloadBinary(url, dest) {
@@ -102,23 +106,54 @@ async function downloadBinary(url, dest) {
 }
 
 async function run() {
-  console.log(`⬇️ Downloading native H0wZy/mcp CLI (v${VERSION}) for ${platform()}-${arch()}...`);
   mkdirSync(cacheDir, { recursive: true });
-  const downloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/${binaryAsset}`;
+
+  let downloadVersion = VERSION;
+  let targetBinary = join(cacheDir, `${binaryAsset}-v${downloadVersion}`);
+
+  if (existsSync(targetBinary)) {
+    const res = spawnSync(targetBinary, args, { stdio: 'inherit' });
+    process.exit(res.status ?? 0);
+  }
+
+  // Also check if fallback release binary is already cached
+  const fallbackBinary = join(cacheDir, `${binaryAsset}-v${FALLBACK_RELEASE}`);
+
+  console.log(`⬇️ Downloading native H0wZy/mcp CLI (v${downloadVersion}) for ${platform()}-${arch()}...`);
+  let downloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/v${downloadVersion}/${binaryAsset}`;
 
   try {
-    await downloadBinary(downloadUrl, cachedBinary);
-    if (!isWindows) {
-      chmodSync(cachedBinary, 0o755);
-    }
-    console.log('✅ Download complete! Starting CLI...\n');
-    const res = spawnSync(cachedBinary, args, { stdio: 'inherit' });
-    process.exit(res.status ?? 0);
+    await downloadBinary(downloadUrl, targetBinary);
   } catch (err) {
-    console.error(`❌ Could not download prebuilt binary: ${err.message}`);
-    console.error(`   Please download manually from: https://github.com/${GITHUB_REPO}/releases/tag/v${VERSION}`);
-    process.exit(1);
+    if (downloadVersion !== FALLBACK_RELEASE) {
+      if (existsSync(fallbackBinary)) {
+        const res = spawnSync(fallbackBinary, args, { stdio: 'inherit' });
+        process.exit(res.status ?? 0);
+      }
+      downloadVersion = FALLBACK_RELEASE;
+      targetBinary = fallbackBinary;
+      downloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/v${downloadVersion}/${binaryAsset}`;
+      console.log(`⬇️ Resolving stable release v${downloadVersion}...`);
+      try {
+        await downloadBinary(downloadUrl, targetBinary);
+      } catch (fallbackErr) {
+        console.error(`❌ Could not download prebuilt binary: ${fallbackErr.message}`);
+        console.error(`   Please download manually from: https://github.com/${GITHUB_REPO}/releases/tag/v${FALLBACK_RELEASE}`);
+        process.exit(1);
+      }
+    } else {
+      console.error(`❌ Could not download prebuilt binary: ${err.message}`);
+      console.error(`   Please download manually from: https://github.com/${GITHUB_REPO}/releases/tag/v${VERSION}`);
+      process.exit(1);
+    }
   }
+
+  if (!isWindows) {
+    chmodSync(targetBinary, 0o755);
+  }
+  console.log('✅ Download complete! Starting CLI...\n');
+  const res = spawnSync(targetBinary, args, { stdio: 'inherit' });
+  process.exit(res.status ?? 0);
 }
 
 run();
