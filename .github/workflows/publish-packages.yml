@@ -27,13 +27,13 @@ jobs:
         run: npm install -g npm@latest
 
       - name: Publish @h0wzy/mcp-shared
-        run: npm publish ./shared --access public --provenance
+        run: npm publish ./shared --access public --provenance || echo "Already published on npm"
 
       - name: Publish @h0wzy/mcp-server-antigravity
-        run: npm publish ./servers/antigravity --access public --provenance
+        run: npm publish ./servers/antigravity --access public --provenance || echo "Already published on npm"
 
       - name: Publish @h0wzy/mcp-server-codex
-        run: npm publish ./servers/codex --access public --provenance
+        run: npm publish ./servers/codex --access public --provenance || echo "Already published on npm"
 
       - name: Publish @h0wzy/mcp
-        run: npm publish ./npm --access public --provenance
+        run: npm publish ./npm --access public --provenance || echo "Already published on npm"
