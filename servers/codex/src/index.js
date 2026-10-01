@@ -8,7 +8,7 @@ import { createMcpServer, resolveBinary, executeProcess, formatResilientResponse
 const DEFAULT_MODEL = process.env.CODEX_MODEL || 'gpt-5.6-terra';
 const TIMEOUT_MS = 300000; // 5 minutes
 
-async function executeCodexCommand(subcommand, prompt, paths = [], model, extraArgs = []) {
+async function executeCodexCommand(subcommand, prompt, paths = [], model, extraArgs = [], { cwd, timeoutMs = TIMEOUT_MS } = {}) {
   if (!prompt) {
     return { text: 'Missing required argument: prompt', isError: true };
   }
@@ -52,7 +52,9 @@ async function executeCodexCommand(subcommand, prompt, paths = [], model, extraA
     }
   }
 
-  const res = await executeProcess(codexBin, args, { timeoutMs: TIMEOUT_MS, toolName: 'codex', input: fullPrompt });
+  if (cwd) args.push('-C', cwd);
+
+  const res = await executeProcess(codexBin, args, { cwd, timeoutMs, toolName: 'codex', input: fullPrompt });
 
   if (res.ok) {
     return {
@@ -194,10 +196,34 @@ export const planCodexTool = {
     ),
 };
 
+export const delegateCodexTool = {
+  name: 'delegate_codex',
+  description:
+    'Hand a self-contained implementation task to OpenAI Codex, which EDITS FILES inside `cwd` ' +
+    '(workspace-write sandbox, approvals routed to automatic review). Use for well-specified tasks with ' +
+    'clear file ownership; review the diff afterwards. Returns the final report from Codex.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      prompt: { type: 'string', description: 'The task: goal, files it may touch, acceptance checks, what to report.' },
+      cwd: { type: 'string', description: 'Absolute path of the repository or folder to work in.' },
+      paths: { type: 'array', items: { type: 'string' }, description: 'Optional extra files/folders to read.' },
+      model: { type: 'string', description: 'Optional model override.' },
+      timeout_minutes: { type: 'number', description: 'Max run time, 1-60 (default 30).' },
+    },
+    required: ['prompt', 'cwd'],
+  },
+  handler: ({ prompt, cwd, paths, model, timeout_minutes }) =>
+    executeCodexCommand('exec', prompt, paths, model, ['--ephemeral', '--approve-for-me'], {
+      cwd,
+      timeoutMs: Math.min(Math.max(Math.round(timeout_minutes || 30), 1), 60) * 60000,
+    }),
+};
+
 export function createServer() {
   return createMcpServer({
     name: 'codex',
     version: '1.0.2',
-    tools: [askCodexTool, reviewCodexTool, brainstormCodexTool, planCodexTool],
+    tools: [askCodexTool, reviewCodexTool, brainstormCodexTool, planCodexTool, delegateCodexTool],
   });
 }

@@ -5,10 +5,10 @@ import { statSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createMcpServer, resolveBinary, executeProcess, formatResilientResponse } from '../../../shared/index.js';
 
-const DEFAULT_MODEL = process.env.AGY_MODEL || 'Gemini 3.1 Pro (High)';
+const DEFAULT_MODEL = process.env.AGY_MODEL || 'Gemini 3.8 Flash (High)';
 const TIMEOUT_MS = 300000; // 5 minutes
 
-async function executeAgyPrompt({ prompt, prefix = '', paths = [], model }) {
+async function executeAgyPrompt({ prompt, prefix = '', paths = [], model, cwd, timeoutMinutes = 5 }) {
   if (!prompt) {
     return { text: 'Missing required argument: prompt', isError: true };
   }
@@ -26,7 +26,7 @@ async function executeAgyPrompt({ prompt, prefix = '', paths = [], model }) {
     };
   }
 
-  const dirs = new Set();
+  const dirs = new Set(cwd ? [cwd] : []);
   for (const p of paths) {
     try {
       dirs.add(statSync(p).isDirectory() ? p : dirname(p));
@@ -46,12 +46,16 @@ async function executeAgyPrompt({ prompt, prefix = '', paths = [], model }) {
     '--model',
     model || DEFAULT_MODEL,
     '--print-timeout',
-    '5m',
+    `${timeoutMinutes}m`,
     '--dangerously-skip-permissions',
   ];
   for (const d of dirs) args.push('--add-dir', d);
 
-  const res = await executeProcess(agyBin, args, { timeoutMs: TIMEOUT_MS, toolName: 'agy' });
+  const res = await executeProcess(agyBin, args, {
+    cwd,
+    timeoutMs: cwd ? timeoutMinutes * 60000 + 30000 : TIMEOUT_MS,
+    toolName: 'agy',
+  });
 
   if (res.ok) {
     return {
@@ -194,6 +198,33 @@ export const planAntigravityTool = {
     }),
 };
 
+export const delegateAntigravityTool = {
+  name: 'delegate_antigravity',
+  description:
+    'Hand a self-contained implementation task to Google Antigravity, which EDITS FILES inside `cwd` ' +
+    '(permissions skipped). Use for well-specified tasks with clear file ownership; review the diff ' +
+    'afterwards. Returns the final report from Antigravity.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      prompt: { type: 'string', description: 'The task: goal, files it may touch, acceptance checks, what to report.' },
+      cwd: { type: 'string', description: 'Absolute path of the repository or folder to work in.' },
+      paths: { type: 'array', items: { type: 'string' }, description: 'Optional extra files/folders to read.' },
+      model: { type: 'string', description: 'Optional model override (default Gemini 3.8 Flash (High)).' },
+      timeout_minutes: { type: 'number', description: 'Max run time, 1-60 (default 30).' },
+    },
+    required: ['prompt', 'cwd'],
+  },
+  handler: ({ prompt, cwd, paths, model, timeout_minutes }) =>
+    executeAgyPrompt({
+      prompt,
+      paths,
+      model,
+      cwd,
+      timeoutMinutes: Math.min(Math.max(Math.round(timeout_minutes || 30), 1), 60),
+    }),
+};
+
 export function createServer() {
   return createMcpServer({
     name: 'antigravity',
@@ -203,6 +234,7 @@ export function createServer() {
       reviewAntigravityTool,
       brainstormAntigravityTool,
       planAntigravityTool,
+      delegateAntigravityTool,
     ],
   });
 }

@@ -108,7 +108,8 @@ test('Antigravity MCP server answers initialize and lists all 4 tools', async ()
   assert.ok(toolNames.includes('review_antigravity'), 'Must include review_antigravity');
   assert.ok(toolNames.includes('brainstorm_antigravity'), 'Must include brainstorm_antigravity');
   assert.ok(toolNames.includes('plan_antigravity'), 'Must include plan_antigravity');
-  assert.equal(toolNames.length, 4);
+  assert.ok(toolNames.includes('delegate_antigravity'), 'Must include delegate_antigravity');
+  assert.equal(toolNames.length, 5);
 });
 
 test('Codex MCP server answers initialize and lists all 4 tools', async () => {
@@ -127,5 +128,6 @@ test('Codex MCP server answers initialize and lists all 4 tools', async () => {
   assert.ok(toolNames.includes('review_codex'), 'Must include review_codex');
   assert.ok(toolNames.includes('brainstorm_codex'), 'Must include brainstorm_codex');
   assert.ok(toolNames.includes('plan_codex'), 'Must include plan_codex');
-  assert.equal(toolNames.length, 4);
+  assert.ok(toolNames.includes('delegate_codex'), 'Must include delegate_codex');
+  assert.equal(toolNames.length, 5);
 });
