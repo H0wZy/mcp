@@ -214,7 +214,7 @@ export const delegateCodexTool = {
     required: ['prompt', 'cwd'],
   },
   handler: ({ prompt, cwd, paths, model, timeout_minutes }) =>
-    executeCodexCommand('exec', prompt, paths, model, ['--ephemeral', '--approve-for-me'], {
+    executeCodexCommand('exec', prompt, paths, model, ['--ephemeral', '--skip-git-repo-check', '--approve-for-me'], {
       cwd,
       timeoutMs: Math.min(Math.max(Math.round(timeout_minutes || 30), 1), 60) * 60000,
     }),
