@@ -228,7 +228,7 @@ export const delegateAntigravityTool = {
 export function createServer() {
   return createMcpServer({
     name: 'antigravity',
-    version: '1.0.2',
+    version: '1.0.5',
     tools: [
       askAntigravityTool,
       reviewAntigravityTool,

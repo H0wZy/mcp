@@ -17,6 +17,11 @@ Part of the **[H0wZy/mcp](https://github.com/H0wZy/mcp)** multi-agent ecosystem.
 | `review_antigravity` | `diff` *(string)*, `instruction` *(string)* | Comprehensive code and security review inspecting correctness, potential regressions, and edge cases. |
 | `brainstorm_antigravity` | `topic` *(string)*, `context` *(string)* | Architectural exploration, trade-offs, and design pattern ideation with Gemini. |
 | `plan_antigravity` | `goal` *(string)*, `requirements` *(string)* | Structured implementation roadmaps with dependency-ordered execution steps. |
+| `delegate_antigravity` | `prompt` *(string)*, `cwd` *(string)*, `paths` *(string[], optional)*, `model` *(string, optional)*, `timeout_minutes` *(number, 1-60, default 30)* | **Edits files** inside `cwd`. Hand a self-contained implementation task to Antigravity and get its final report. Review the diff afterwards. |
+
+> `delegate_antigravity` writes to disk and never commits. Review the diff (`git diff`) before keeping its changes.
+>
+> **Default model:** all Antigravity tools now default to `Gemini 3.8 Flash (High)` (previously Gemini 3.1 Pro). Override per call with `model` or globally with the `AGY_MODEL` env var.
 
 ---
 

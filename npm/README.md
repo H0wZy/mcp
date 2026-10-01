@@ -77,10 +77,22 @@ hmcp remove claude-antigravity
 | **Antigravity** | `review_antigravity` | Comprehensive code & security review inspecting correctness, edge cases, and diffs |
 | **Antigravity** | `brainstorm_antigravity` | Architectural exploration, trade-offs, and design patterns with Gemini |
 | **Antigravity** | `plan_antigravity` | Structured implementation roadmaps and dependency-ordered execution steps |
+| **Antigravity** | `delegate_antigravity` | **Edits files.** Hands an implementation task to Antigravity inside `cwd` (`prompt`, `cwd`, optional `paths`, `model`, `timeout_minutes` 1-60, default 30). Review the diff afterwards |
 | **Codex** | `ask_codex` | Cross-verification with OpenAI Codex (GPT-5.6 Terra / GPT-6 Astra) |
 | **Codex** | `review_codex` | Structured repository code review from OpenAI Codex |
 | **Codex** | `brainstorm_codex` | Architectural exploration, trade-offs, and system design ideation with Codex |
 | **Codex** | `plan_codex` | Step-by-step implementation planning and checklist generation |
+| **Codex** | `delegate_codex` | **Edits files.** Hands an implementation task to Codex inside `cwd` (workspace-write sandbox; `prompt`, `cwd`, optional `paths`, `model`, `timeout_minutes` 1-60, default 30). Review the diff afterwards |
+
+> **Delegation tools write to disk.** `delegate_codex` and `delegate_antigravity` run the agent inside the given `cwd` and may create or modify files. They never commit for you: always review the resulting diff (`git diff`) before keeping the changes.
+>
+> **Antigravity default model:** all Antigravity tools now default to `Gemini 3.8 Flash (High)` (previously Gemini 3.1 Pro). Override per call with `model` or globally with the `AGY_MODEL` environment variable.
+
+---
+
+## 🗺️ Roadmap / Future
+
+> **Idea, not implemented.** A "super orchestrator" where Claude, Codex and Antigravity share a single task list (for example GitHub Projects) and exchange messages with each other, so they can pick up, hand off and review tasks without a human relaying every step. Today they are only driven one-way through the MCP tools above.
 
 ---
 

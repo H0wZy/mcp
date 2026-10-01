@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	Current      = "1.0.3"
+	Current      = "1.0.5"
 	NpmRegistry  = "https://registry.npmjs.org/@h0wzy/mcp/latest"
 	GitHubLatest = "https://api.github.com/repos/H0wZy/mcp/releases/latest"
 	CacheTTL     = 4 * time.Hour

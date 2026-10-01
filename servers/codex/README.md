@@ -17,6 +17,9 @@ Part of the **[H0wZy/mcp](https://github.com/H0wZy/mcp)** multi-agent ecosystem.
 | `review_codex` | `diff` *(string)*, `instruction` *(string)* | Structured repository code review from OpenAI Codex inspecting safety, tests, and diffs. |
 | `brainstorm_codex` | `topic` *(string)*, `context` *(string)* | Architectural exploration, trade-offs, and system design ideation with Codex. |
 | `plan_codex` | `goal` *(string)*, `requirements` *(string)* | Step-by-step implementation planning, checklists, and dependency roadmaps. |
+| `delegate_codex` | `prompt` *(string)*, `cwd` *(string)*, `paths` *(string[], optional)*, `model` *(string, optional)*, `timeout_minutes` *(number, 1-60, default 30)* | **Edits files** inside `cwd` (workspace-write sandbox). Hand a self-contained implementation task to Codex and get its final report. Review the diff afterwards. |
+
+> `delegate_codex` writes to disk and never commits. Review the diff (`git diff`) before keeping its changes.
 
 ---
 

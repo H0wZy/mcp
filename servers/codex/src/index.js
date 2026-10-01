@@ -223,7 +223,7 @@ export const delegateCodexTool = {
 export function createServer() {
   return createMcpServer({
     name: 'codex',
-    version: '1.0.2',
+    version: '1.0.5',
     tools: [askCodexTool, reviewCodexTool, brainstormCodexTool, planCodexTool, delegateCodexTool],
   });
 }
