@@ -29,9 +29,13 @@ async function executeCodexCommand(subcommand, prompt, paths = [], model, extraA
     ? `Context files/directories to inspect in full:\n${paths.map((p) => `- ${p}`).join('\n')}\n\n${prompt}`
     : prompt;
 
+  // The prompt goes through stdin ('-'): on Windows codex resolves to codex.cmd, which runs through cmd.exe
+  // and splits an argv prompt on spaces. --no-daemon: one-shot calls need no shared app-server, and the
+  // daemon refuses to start from an elevated process.
   const args = [
+    '--no-daemon',
     subcommand,
-    fullPrompt,
+    '-',
     '-m',
     model || DEFAULT_MODEL,
     '--color',
@@ -48,7 +52,7 @@ async function executeCodexCommand(subcommand, prompt, paths = [], model, extraA
     }
   }
 
-  const res = await executeProcess(codexBin, args, { timeoutMs: TIMEOUT_MS, toolName: 'codex' });
+  const res = await executeProcess(codexBin, args, { timeoutMs: TIMEOUT_MS, toolName: 'codex', input: fullPrompt });
 
   if (res.ok) {
     return {

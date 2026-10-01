@@ -14,6 +14,7 @@ import { childEnvWithAugmentedPath } from './resolver.js';
  * @param {NodeJS.ProcessEnv} [options.env] Extra environment variables
  * @param {number} [options.timeoutMs=180000] Timeout in ms (default: 3 minutes)
  * @param {string} [options.toolName] Tool name to augment PATH for
+ * @param {string} [options.input] Text written to stdin (keeps long prompts out of argv, which cmd.exe re-splits)
  * @returns {Promise<{ exitCode: number, stdout: string, stderr: string, ok: boolean, timedOut: boolean }>}
  */
 export function executeProcess(command, args = [], options = {}) {
@@ -23,6 +24,7 @@ export function executeProcess(command, args = [], options = {}) {
       env = {},
       timeoutMs = 180000,
       toolName,
+      input,
     } = options;
 
     const childEnv = {
@@ -41,7 +43,7 @@ export function executeProcess(command, args = [], options = {}) {
     const child = spawn(command, args, {
       cwd,
       env: childEnv,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
       shell: needsShell,
     });
 
@@ -55,6 +57,8 @@ export function executeProcess(command, args = [], options = {}) {
           }
         }, timeoutMs)
       : null;
+
+    if (input !== undefined) child.stdin.end(input);
 
     child.stdout.on('data', (chunk) => {
       stdout += chunk;
