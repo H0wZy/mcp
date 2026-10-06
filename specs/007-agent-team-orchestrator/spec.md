@@ -79,10 +79,27 @@ The lead can ask for the team's status at any moment: each teammate's state (wor
 2. **Given** the lead waits with a timeout, **When** any team event happens before the timeout, **Then** the wait returns within 5 seconds of that event, with the event.
 3. **Given** the lead waits, **When** nothing happens before the timeout, **Then** the wait returns "no events" and a status summary, and the team keeps working.
 4. **Given** a teammate fails (crash, quota, auth, budget), **When** the failure happens, **Then** the lead gets a failure event with the reason, and the teammate's task is released or marked failed.
+5. **Given** a teammate produced a long output (for example a large diff or report), **When** its result reaches the lead, **Then** the lead receives a compact summary within the size cap, plus a reference to the full output that it can read only if it needs to.
 
 ---
 
-### User Story 4 - Teammates message each other and keep their own context (Priority: P2)
+### User Story 4 - Same workflow from every harness, with each one's own trigger (Priority: P1)
+
+The developer works in whichever harness they prefer and starts or steers a team the way that harness normally invokes a skill: `/` in Claude Code, `$` in Codex, and Antigravity's own skill trigger. They can also just ask in natural language ("put Codex and Antigravity on this, I don't want to spend Claude tokens"). `@` is not used for this, because all three harnesses reserve it for referencing files.
+
+**Why this priority**: The orchestrator only helps if it fits how the developer already works in an interactive session. A command that works in one harness and not in the others breaks the "any agent can lead" promise.
+
+**Independent Test**: Install the hub on a machine with all three harnesses. In each one, start the same small team twice: once with the native skill trigger, once with a plain-language request. Check that all six starts produce the same team behavior.
+
+**Acceptance Scenarios**:
+
+1. **Given** the hub is installed, **When** the developer types the harness's native skill trigger followed by the team skill's name, **Then** the skill loads and guides the lead to create and run the team.
+2. **Given** the developer asks in natural language without naming the skill, **When** the request is about delegating to or teaming up with other agents, **Then** the lead picks up the same skill automatically.
+3. **Given** a harness is detected on the machine, **When** the installer runs, **Then** the team skill is installed where that harness discovers skills, and a later reinstall updates it in place.
+
+---
+
+### User Story 5 - Teammates message each other and keep their own context (Priority: P2)
 
 Any teammate can message any other teammate or the lead by name. The lead (or the developer, through the lead) can message any teammate. Messages are delivered at the start of the recipient's next turn. Each teammate keeps its own conversation across turns, so a follow-up message doesn't need the original task repeated.
 
@@ -100,7 +117,7 @@ Any teammate can message any other teammate or the lead by name. The lead (or th
 
 ---
 
-### User Story 5 - Hard limits on cost, time and team size (Priority: P2)
+### User Story 6 - Hard limits on cost, time and team size (Priority: P2)
 
 The developer can cap each team's size, each teammate's turns, the team's total turns, the team's wall-clock time and, where the agent supports it, spending. Teammates can't create teams of their own. Every teammate turn counts as a hop in the loop-guard chain from spec 006. Shutting down the lead's session stops all teammates.
 
@@ -117,7 +134,7 @@ The developer can cap each team's size, each teammate's turns, the team's total 
 
 ---
 
-### User Story 6 - Teammates that edit files don't overwrite each other (Priority: P3)
+### User Story 7 - Teammates that edit files don't overwrite each other (Priority: P3)
 
 When the lead spawns teammates that will edit files, it can give each one an isolated copy of the workspace, or a declared set of files it owns. The lead sees each teammate's changes separately and decides what to bring in.
 
@@ -132,7 +149,7 @@ When the lead spawns teammates that will edit files, it can give each one an iso
 
 ---
 
-### User Story 7 - Quality gates on task completion (Priority: P3)
+### User Story 8 - Quality gates on task completion (Priority: P3)
 
 The lead (or developer) can attach a check to a task, for example "the test suite passes". A teammate's "done" is only accepted when the check passes. Otherwise the task goes back to the teammate with the check's output.
 
@@ -156,7 +173,7 @@ The lead (or developer) can attach a check to a task, for example "the test suit
 - **Messages pile up for a teammate that's out of turns**: They stay in its mailbox and show up in status. They don't silently restart the teammate.
 - **Two teams in different projects at the same time**: They are fully independent. One team's limits, tasks and mailboxes never mix with another's.
 - **Lead session resumed later**: Team state (tasks, messages, results) can be read again. Teammates that are no longer running are shown as stopped and can be respawned with their earlier context where the agent supports resuming conversations.
-- **Malformed or hostile content in a teammate's output or message**: It is treated as data, never as orchestrator instructions or permission grants (Story 4, scenario 5).
+- **Malformed or hostile content in a teammate's output or message**: It is treated as data, never as orchestrator instructions or permission grants (Story 5, scenario 5).
 - **A teammate tries to delegate to another agent through the bridges**: Allowed within spec 006 limits. Its chain starts below the team's position, so the depth and budget rules still hold.
 
 ---
@@ -185,9 +202,15 @@ The lead (or developer) can attach a check to a task, for example "the test suit
 **Events, waiting and messaging**
 
 - **FR-012**: `team_wait` MUST block until the next team event or a lead-chosen timeout (default 5 minutes, maximum 30). It MUST return each event within 5 seconds of it happening. Events MUST include: teammate idle (with its final answer), teammate failed (with reason), task completed / failed, and message to the lead.
+- **FR-012a**: Everything returned to the lead (teammate results, events, messages, status) MUST be kept compact. Each teammate result MUST be cut to a summary within a configurable size cap (default 8,000 characters). The full output MUST be kept in the team's state and readable on demand. The goal is that the lead's own token use grows with the number of events, not with how much the teammates produce.
 - **FR-013**: `team_status` MUST return, in one response, every teammate's state, current task, turns and usage so far, and the full task list.
 - **FR-014**: Any team member (lead or teammate) MUST be able to send a message to any other member by name. Messages MUST be delivered at the start of the recipient's next turn. A message to an idle teammate MUST wake it for one turn, within its turn budget.
 - **FR-015**: Messages and teammate outputs MUST be shown to recipients as coming from another agent, never from the developer. They MUST NOT be able to approve permissions, raise limits, or change team configuration.
+
+**Invocation from each harness**
+
+- **FR-013a**: The hub MUST ship one team skill with identical behavior for all three harnesses. The skill MUST be invocable with each harness's native skill trigger (Claude Code `/`, Codex `$`, Antigravity's own trigger) and MUST also be picked up from natural-language requests about delegating to or teaming up with other agents. The design MUST NOT rely on `@`, which all three harnesses reserve for file references.
+- **FR-013b**: The installer MUST install and update the team skill in each detected harness's skill location, and `hmcp doctor` MUST report where it is installed.
 
 **Guardrails**
 
@@ -227,6 +250,8 @@ The lead (or developer) can attach a check to a task, for example "the test suit
 - **SC-005**: Across the full test suite with limits set, 0 runs exceed any team limit, and 0 teammate processes are still running 10 seconds after the lead's session ends.
 - **SC-006**: The same reference workload can be led from each of the three host agents with the same outcome.
 - **SC-007**: In an adversarial test where every teammate is told to spawn its own teammates and to delegate in a loop, 100% of attempts are refused or bounded by spec-006 limits.
+- **SC-008**: For a teammate result of any size, the text returned to the lead never exceeds the configured cap, and the full output can still be read on demand.
+- **SC-009**: In each of the three harnesses, the team skill starts the reference workload both through the native skill trigger and through a plain-language request (6 out of 6 starts).
 
 ---
 

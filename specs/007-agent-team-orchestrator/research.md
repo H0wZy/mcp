@@ -120,3 +120,19 @@ Cost ≈ Σ over teammates of (turns × (system + carried context + new input + 
 | Context forwarding not available on a host | Option B doesn't need it. Option C waits for spec 006 forwarding plus the ancestry fallback |
 | Cost blow-up | Conservative defaults, hard caps, budgets surfaced in every `team_status` |
 | Teammates edit the same files | Worktree isolation or declared ownership; reviews and research first, as Agent Teams also advises |
+
+---
+
+## 7. Invocation across harnesses (FR-013a/b)
+
+All three harnesses reserve `@` for file references, so the team workflow is a **skill**: one `SKILL.md` (the open Agent Skills format), installed where each harness discovers skills and invoked with that harness's own trigger. The skill's `description` field also lets each harness pick it up from plain-language requests.
+
+| Harness | Skill trigger | Where skills are discovered |
+|---|---|---|
+| Claude Code | `/<skill>` | `.claude/skills/<skill>/SKILL.md` (project), `~/.claude/skills/` (user). Claude Code does not read `.agents/`. |
+| Codex | `$<skill>` (per maintainer; **VERIFY**) | `.agents/skills/` in the repo and a user-level dir (**VERIFY** exact path) |
+| Antigravity | its own skill trigger (**VERIFY**) | `.agents/skills/` (this repo's spec-kit `agy` integration installs skills there) |
+
+The installer copies one source skill to each detected harness's location. Copy rather than symlink: Windows symlinks need elevated rights or developer mode. `hmcp doctor` reports drift between the copies.
+
+The skill body should stay short and procedural: when to form a team versus a single `ask_*` call, how to pick tiers per role to save the lead's tokens, the limits, and the `team_*` call sequence (create → spawn → wait loop → collect → shutdown).
