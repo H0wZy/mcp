@@ -6,11 +6,11 @@ import { createMcpServer, SUPPORTED_PROTOCOL_VERSIONS } from '../server.js';
 async function capture(fn) {
   const messages = [];
   const originalWrite = process.stdout.write;
+  // Only capture JSON-RPC lines; the test runner writes to stdout too.
   process.stdout.write = (chunk, ...rest) => {
-    const text = chunk.toString().trim();
-    if (text) messages.push(JSON.parse(text));
-    const cb = rest.find((r) => typeof r === 'function');
-    if (cb) cb();
+    const text = chunk.toString();
+    if (!text.startsWith('{"jsonrpc"')) return originalWrite.call(process.stdout, chunk, ...rest);
+    messages.push(JSON.parse(text.trim()));
     return true;
   };
   try {
