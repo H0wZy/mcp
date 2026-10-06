@@ -3,13 +3,20 @@
 
 import { statSync } from 'node:fs';
 import { dirname } from 'node:path';
-import {
+
+// Installed from npm, @h0wzy/mcp-shared is a real dependency. Run straight from a
+// clone without `npm install`, fall back to the workspace copy of shared/.
+const shared = await import('@h0wzy/mcp-shared').catch((err) => {
+  if (err?.code !== 'ERR_MODULE_NOT_FOUND') throw err;
+  return import('../../../shared/index.js');
+});
+const {
   createMcpServer,
   resolveBinary,
   executeProcess,
   formatResilientResponse,
   createAgentConfig,
-} from '../../../shared/index.js';
+} = shared;
 
 const TIMEOUT_MS = 300000; // 5 minutes
 

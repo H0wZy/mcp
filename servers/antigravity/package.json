@@ -14,6 +14,9 @@
     "h0wzy-mcp-antigravity": "bin/cli.js"
   },
   "main": "./src/index.js",
+  "dependencies": {
+    "@h0wzy/mcp-shared": "1.0.6"
+  },
   "author": "Marcos (H0wZy) <h0wzymarcos@gmail.com>",
   "license": "MIT",
   "repository": {
