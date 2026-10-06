@@ -357,30 +357,44 @@ export function createAgentConfig(options) {
   }
 
   // 4. Catalog Cache State
+  // Loading never blocks callers (they get the curated list meanwhile), so a slow CLI
+  // can take longer than the 5 s discovery budget; a failed load is retried later.
+  const catalogTimeoutMs = options.catalogTimeoutMs ?? 5000;
+  const catalogRetryMs = options.catalogRetryMs ?? 10 * 60 * 1000;
   let catalog = [...CURATED_CATALOGS[provider]];
   let catalogSource = 'curated';
   let catalogStatus = 'ready'; // 'ready', 'loading', 'failed'
   let catalogLoadedPromise = null;
+  let catalogFailedAt = 0;
 
   function ensureCatalogLoading() {
-    if (catalogLoadedPromise || !catalogLoader) return;
+    if (!catalogLoader || catalogLoadedPromise || catalogSource === 'live') return;
+    if (catalogFailedAt && Date.now() - catalogFailedAt < catalogRetryMs) return;
     catalogStatus = 'loading';
     catalogLoadedPromise = (async () => {
+      let timer;
       try {
         const loaded = await Promise.race([
           catalogLoader(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+          new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error('timeout')), catalogTimeoutMs);
+            timer.unref?.();
+          }),
         ]);
         if (Array.isArray(loaded) && loaded.length > 0) {
           catalog = loaded;
           catalogSource = 'live';
           catalogStatus = 'ready';
-        } else {
-          catalogStatus = 'failed';
+          return;
         }
+        catalogStatus = 'failed';
       } catch {
         catalogStatus = 'failed';
+      } finally {
+        clearTimeout(timer);
       }
+      catalogFailedAt = Date.now();
+      catalogLoadedPromise = null;
     })();
   }
 
@@ -393,8 +407,13 @@ export function createAgentConfig(options) {
     warnings: [],
   };
 
+  function effortsFor(modelId) {
+    return findModelInCatalog(modelId, catalog)?.entry.efforts || EFFORT_LEVELS;
+  }
+
   /**
-   * Applies developer ceiling clamping to a proposed model and effort.
+   * Applies developer ceiling clamping to a proposed model and effort, then re-maps the
+   * effort to what the final model supports.
    */
   function applyCeilings(modelId, effortLevel, modelTierNote = 'balanced') {
     const warnings = [];
@@ -407,9 +426,21 @@ export function createAgentConfig(options) {
     }
 
     if (maxTier && TIER_RANKS[modelTierNote] > TIER_RANKS[maxTier]) {
-      const fallbackModel = tiers[maxTier].model;
-      warnings.push(`Model '${mod}' (tier: ${modelTierNote}) clamped to ceiling '${maxTier}' (${fallbackModel}) by ${prefix}MAX_TIER`);
-      mod = fallbackModel;
+      const ceilingTier = tiers[maxTier];
+      warnings.push(`Model '${mod}' (tier: ${modelTierNote}) clamped to ceiling '${maxTier}' (${ceilingTier.model}) by ${prefix}MAX_TIER`);
+      mod = ceilingTier.model;
+      // A tier is a model and an effort: running the tier's model above the tier's
+      // effort would still exceed the ceiling (codex 'balanced' uses the same model as 'deep').
+      if (EFFORT_RANKS[eff] > EFFORT_RANKS[ceilingTier.effort]) {
+        warnings.push(`Effort '${eff}' clamped to '${ceilingTier.effort}' by the '${maxTier}' tier ceiling`);
+        eff = ceilingTier.effort;
+      }
+    }
+
+    const remapped = mapEffort(eff, effortsFor(mod));
+    if (remapped.mappedFrom) {
+      warnings.push(`Effort '${eff}' not supported by ${mod}; mapped to '${remapped.effort}'`);
+      eff = remapped.effort;
     }
 
     return { model: mod, effort: eff, warnings };
@@ -471,6 +502,8 @@ export function createAgentConfig(options) {
           throw new Error(`Model name '${targetModel}' contains invalid characters. Must match ${SAFE_IDENTIFIER_REGEX}`);
         }
         warnings.push(`Model '${targetModel}' could not be verified against live catalog (using unverified model)`);
+        // Its strength is unknown, so it must not slip under a tier ceiling.
+        if (maxTier) modelTier = 'deep';
       }
     }
 
@@ -483,6 +516,9 @@ export function createAgentConfig(options) {
     // Apply ceilings
     const clamped = applyCeilings(canonicalModel, mapped.effort, modelTier);
     warnings.push(...clamped.warnings);
+    if (clamped.effort === 'ultra') {
+      warnings.push("Effort 'ultra' makes Codex delegate sub-tasks on its own; expect much higher cost and latency");
+    }
 
     return {
       model: clamped.model,
@@ -617,12 +653,23 @@ export function createAgentConfig(options) {
   function resolveCall(overrides = {}) {
     ensureCatalogLoading();
     const hasOverride = Boolean(overrides.model || overrides.effort);
+    const notices = [];
+
+    // A session model accepted unverified while the catalog was still loading can be
+    // rejected once the live catalog arrives. Fall back to the startup defaults instead
+    // of failing every later call until someone runs `reset`.
+    if (!overrides.model && catalogSource === 'live' && !findModelInCatalog(activeState.model, catalog)) {
+      const stale = activeState.model;
+      reset();
+      notices.push(`Session model '${stale}' is not in the live catalog; reverted to the startup default '${activeState.model}'`);
+    }
 
     const resolved = resolveSettings({
       model: overrides.model || activeState.model,
       effort: overrides.effort || activeState.effort,
       isExplicit: hasOverride,
     });
+    resolved.warnings = [...notices, ...resolved.warnings];
 
     // Compute CLI-specific argument representations
     let cliModel = resolved.model;
@@ -659,6 +706,15 @@ export function createAgentConfig(options) {
     return `\n\n${base}`;
   }
 
+  // Normalize the startup state once (canonical id, supported effort, ceilings) so `get`
+  // reports what a call would actually run with.
+  try {
+    const initial = resolveSettings({ model: startupModel, effort: startupEffort });
+    activeState = { model: initial.model, effort: initial.effort, tier: null, source: 'startup', warnings: initial.warnings };
+  } catch (err) {
+    activeState.warnings = [err.message];
+  }
+
   return {
     get,
     set,
@@ -667,5 +723,6 @@ export function createAgentConfig(options) {
     resolveCall,
     formatFooter,
     ensureCatalogLoading,
+    catalogReady: () => catalogLoadedPromise || Promise.resolve(),
   };
 }

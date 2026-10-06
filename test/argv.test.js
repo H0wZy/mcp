@@ -136,3 +136,20 @@ test('delegate_antigravity sends --effort for models without a variant and scope
   assert.deepEqual(argv.slice(argv.indexOf('--add-dir'), argv.indexOf('--add-dir') + 2), ['--add-dir', work]);
   assert.ok(samePath(cwd, work), `${cwd} vs ${work}`);
 });
+
+test('an invalid per-call model returns an actionable error instead of a generic execution error', async () => {
+  const result = await callTool(codex, 'ask_codex', { prompt: 'x', model: 'bad model!' });
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /invalid characters/);
+  assert.match(result.content[0].text, /configure_codex with action "list"/);
+  assert.doesNotMatch(result.content[0].text, /Execution Error/);
+});
+
+test('configure_* rejects invalid values with a clear message and leaves the session unchanged', async () => {
+  const result = await callTool(codex, 'configure_codex', { action: 'set', effort: 'insane' });
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /Invalid reasoning effort 'insane'/);
+  assert.match(result.content[0].text, /Nothing was changed/);
+  const state = await callTool(codex, 'configure_codex', { action: 'get' });
+  assert.match(state.content[0].text, /Effort: medium/);
+});

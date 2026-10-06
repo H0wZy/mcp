@@ -165,7 +165,7 @@ test('E2E Scenario 6: Ceiling clamping with warnings', () => {
   assert.ok(snapshot.warnings.some((w) => w.includes('clamped to ceiling \'low\'')));
 });
 
-test('E2E Scenario 7: Validation error handling and fuzzy suggestions', () => {
+test('E2E Scenario 7: Validation error handling and fuzzy suggestions', async () => {
   const customConfig = createAgentConfig({
     provider: 'codex',
     catalogLoader: async () => [
@@ -176,6 +176,10 @@ test('E2E Scenario 7: Validation error handling and fuzzy suggestions', () => {
 
   // Wait for catalog loader to complete
   customConfig.ensureCatalogLoading();
+  await customConfig.catalogReady();
+
+  // Unknown model against a live catalog: rejected with the closest names
+  assert.throws(() => customConfig.set({ model: 'gpt-6-astr' }), /not recognized for codex\. Did you mean: gpt-6-astra/);
 
   // Test invalid effort
   assert.throws(

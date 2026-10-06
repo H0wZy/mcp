@@ -95,7 +95,15 @@ async function executeCodexCommand(
     return { text: `❌ ${err.message}`, isError: true };
   }
 
-  const snapshot = agentConfig.resolveCall({ model, effort });
+  let snapshot;
+  try {
+    snapshot = agentConfig.resolveCall({ model, effort });
+  } catch (err) {
+    return {
+      isError: true,
+      text: `❌ ${err.message}\n💡 Call configure_codex with action "list" for valid models and efforts, or "reset" to restore the defaults.`,
+    };
+  }
 
   const codexBin = resolveBinary('codex', 'CODEX_CLI_PATH');
   if (!codexBin) {
@@ -213,7 +221,12 @@ export const configureCodexTool = {
     }
 
     if (action === 'set') {
-      const updated = agentConfig.set(args);
+      let updated;
+      try {
+        updated = agentConfig.set(args);
+      } catch (err) {
+        return { isError: true, text: `❌ ${err.message}\nNothing was changed. Use action "list" to see valid models, efforts and tiers.` };
+      }
       let summary =
         `⚙️ [OpenAI Codex Configuration Updated]\n` +
         `Previous: ${updated.previous.model} (effort: ${updated.previous.effort}, source: ${updated.previous.source})\n` +

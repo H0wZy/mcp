@@ -176,8 +176,105 @@ test('developer ceilings clamp effort and models with explicit warnings', () => 
   assert.equal(res.active.effort, 'medium');
   assert.ok(res.warnings.some((w) => w.includes('clamped to ceiling \'medium\' by CODEX_MAX_EFFORT')));
 
-  // Model clamped (gpt-6-astra is deep, max tier is balanced -> gpt-6-astra mapped to balanced tier model)
-  assert.equal(res.active.model, 'gpt-6-astra'); // balanced tier model for codex
+  // gpt-6-astra (deep) is above the 'balanced' ceiling; that tier is gpt-6-astra at medium
+  assert.equal(res.active.model, 'gpt-6-astra');
+  assert.ok(res.warnings.some((w) => w.includes("clamped to ceiling 'balanced'")));
+});
+
+test('a light tier ceiling swaps the model and re-maps effort to what it supports', () => {
+  const config = createAgentConfig({ provider: 'codex', env: { CODEX_MAX_TIER: 'light' } });
+  const res = config.set({ model: 'gpt-6-astra', effort: 'ultra' });
+  assert.equal(res.active.model, 'gpt-6-luna');
+  assert.equal(res.active.effort, 'low'); // capped by the light tier's own effort
+  assert.ok(res.warnings.some((w) => w.includes("clamped to ceiling 'light' (gpt-6-luna)")));
+});
+
+test('an effort ceiling re-maps to a level the model actually offers', () => {
+  const config = createAgentConfig({ provider: 'antigravity', env: { AGY_MAX_EFFORT: 'medium' } });
+  // gemini-3.1-pro only offers low and high; medium does not exist for it
+  const snapshot = config.resolveCall({ model: 'gemini-3.1-pro', effort: 'high' });
+  assert.equal(snapshot.effort, 'low');
+  assert.equal(snapshot.cliModel, 'gemini-3.1-pro-low');
+  assert.ok(snapshot.warnings.some((w) => w.includes("not supported by gemini-3.1-pro; mapped to 'low'")));
+});
+
+test('an unverified model cannot slip under a tier ceiling', () => {
+  const config = createAgentConfig({ provider: 'codex', env: { CODEX_MAX_TIER: 'balanced' } });
+  const res = config.set({ model: 'gpt-7-nova', effort: 'max' });
+  assert.equal(res.active.model, 'gpt-6-astra');
+  assert.equal(res.active.effort, 'medium');
+});
+
+test("'ultra' effort always carries a cost warning", () => {
+  const config = createAgentConfig({ provider: 'codex', env: {} });
+  const res = config.set({ model: 'gpt-6-astra', effort: 'ultra' });
+  assert.equal(res.active.effort, 'ultra');
+  assert.ok(res.warnings.some((w) => w.includes("'ultra'")));
+});
+
+test('get() reports the normalized, ceiling-applied startup state', () => {
+  const agy = createAgentConfig({ provider: 'antigravity', env: { AGY_MODEL: 'Gemini 3.8 Flash (Low)' } });
+  assert.equal(agy.get().active.model, 'gemini-3.8-flash');
+  assert.equal(agy.get().active.effort, 'low');
+
+  const codex = createAgentConfig({ provider: 'codex', env: { CODEX_EFFORT: 'max', CODEX_MAX_EFFORT: 'low' } });
+  assert.equal(codex.get().active.effort, 'low');
+  assert.equal(codex.resolveCall().effort, 'low');
+});
+
+test('a session model rejected by the late live catalog falls back to startup instead of failing every call', async () => {
+  let release;
+  const config = createAgentConfig({
+    provider: 'codex',
+    env: {},
+    catalogLoader: () =>
+      new Promise((resolve) => {
+        release = () => resolve([{ id: 'gpt-6-astra', displayName: 'GPT-6-Astra', efforts: ['low', 'medium', 'high'] }]);
+      }),
+  });
+
+  // Accepted unverified while the catalog is still loading
+  const res = config.set({ model: 'gpt-7-nova' });
+  assert.equal(res.active.model, 'gpt-7-nova');
+
+  release();
+  await config.catalogReady();
+
+  const snapshot = config.resolveCall();
+  assert.equal(snapshot.model, 'gpt-6-astra');
+  assert.ok(snapshot.warnings.some((w) => w.includes("Session model 'gpt-7-nova' is not in the live catalog")));
+  assert.equal(config.get().active.model, 'gpt-6-astra');
+
+  // An explicit per-call model that the live catalog rejects is still an error
+  assert.throws(() => config.resolveCall({ model: 'gpt-7-nova' }), /not recognized/);
+});
+
+test('a slow or failing catalog loader times out and is retried later', async () => {
+  let attempts = 0;
+  const config = createAgentConfig({
+    provider: 'codex',
+    env: {},
+    catalogTimeoutMs: 50,
+    catalogRetryMs: 300,
+    catalogLoader: () => {
+      attempts += 1;
+      return attempts === 1
+        ? new Promise((resolve) => setTimeout(() => resolve([]), 1000)) // slower than the 50 ms budget
+        : Promise.resolve([{ id: 'gpt-6-astra', displayName: 'GPT-6-Astra', efforts: ['medium'] }]);
+    },
+  });
+
+  config.ensureCatalogLoading();
+  await config.catalogReady();
+  // Inside the retry window: reads do not hammer the CLI again
+  assert.equal(config.list().catalogStatus, 'failed');
+  assert.equal(attempts, 1);
+
+  await new Promise((r) => setTimeout(r, 350));
+  config.ensureCatalogLoading();
+  await config.catalogReady();
+  assert.equal(attempts, 2);
+  assert.equal(config.list().catalogSource, 'live');
 });
 
 test('environment variable tier overrides', () => {

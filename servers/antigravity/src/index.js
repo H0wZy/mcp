@@ -25,7 +25,9 @@ const TIMEOUT_MS = 300000; // 5 minutes
 async function loadAgyCatalog() {
   const agyBin = resolveBinary('agy', 'AGY_BIN');
   if (!agyBin) return null;
-  const res = await executeProcess(agyBin, ['models'], { timeoutMs: 4500, toolName: 'agy' });
+  // `agy models` takes ~20 s (spec 005 research R3). Loading runs in the background,
+  // so a realistic timeout costs callers nothing; they use the curated list meanwhile.
+  const res = await executeProcess(agyBin, ['models'], { timeoutMs: 40000, toolName: 'agy' });
   if (!res.ok || !res.stdout) return null;
 
   const families = new Map();
@@ -70,6 +72,7 @@ async function loadAgyCatalog() {
 export const agentConfig = createAgentConfig({
   provider: 'antigravity',
   catalogLoader: loadAgyCatalog,
+  catalogTimeoutMs: 45000,
 });
 
 async function executeAgyPrompt({ prompt, prefix = '', paths, model, effort, cwd, requireCwd = false, timeoutMinutes = 5, signal }) {
@@ -86,7 +89,15 @@ async function executeAgyPrompt({ prompt, prefix = '', paths, model, effort, cwd
     return { text: `❌ ${err.message}`, isError: true };
   }
 
-  const snapshot = agentConfig.resolveCall({ model, effort });
+  let snapshot;
+  try {
+    snapshot = agentConfig.resolveCall({ model, effort });
+  } catch (err) {
+    return {
+      isError: true,
+      text: `❌ ${err.message}\n💡 Call configure_antigravity with action "list" for valid models and efforts, or "reset" to restore the defaults.`,
+    };
+  }
 
   const agyBin = resolveBinary('agy', 'AGY_BIN');
   if (!agyBin) {
@@ -205,7 +216,12 @@ export const configureAntigravityTool = {
     }
 
     if (action === 'set') {
-      const updated = agentConfig.set(args);
+      let updated;
+      try {
+        updated = agentConfig.set(args);
+      } catch (err) {
+        return { isError: true, text: `❌ ${err.message}\nNothing was changed. Use action "list" to see valid models, efforts and tiers.` };
+      }
       let summary =
         `⚙️ [Google Antigravity Configuration Updated]\n` +
         `Previous: ${updated.previous.model} (effort: ${updated.previous.effort}, source: ${updated.previous.source})\n` +
