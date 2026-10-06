@@ -26,14 +26,21 @@ jobs:
       - name: Upgrade npm to latest for Trusted Publishing OIDC
         run: npm install -g npm@latest
 
-      - name: Publish @h0wzy/mcp-shared
-        run: npm publish ./shared --access public --provenance || echo "Already published on npm"
+      - name: Run tests before publishing
+        run: npm test
 
-      - name: Publish @h0wzy/mcp-server-antigravity
-        run: npm publish ./servers/antigravity --access public --provenance || echo "Already published on npm"
-
-      - name: Publish @h0wzy/mcp-server-codex
-        run: npm publish ./servers/codex --access public --provenance || echo "Already published on npm"
-
-      - name: Publish @h0wzy/mcp
-        run: npm publish ./npm --access public --provenance || echo "Already published on npm"
+      # Order matters: the servers depend on @h0wzy/mcp-shared at the same version.
+      # Only a version that is already on npm is skipped; any other publish error
+      # (auth, OIDC, 403) fails the job instead of being swallowed.
+      - name: Publish packages
+        run: |
+          set -euo pipefail
+          for dir in shared servers/antigravity servers/codex npm; do
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "Skipping $name@$version: already published"
+            else
+              npm publish "./$dir" --access public --provenance
+            fi
+          done

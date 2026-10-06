@@ -3,7 +3,7 @@
 [![npm](https://img.shields.io/npm/v/%40h0wzy%2Fmcp-server-codex?color=CB3837&logo=npm)](https://www.npmjs.com/package/@h0wzy/mcp-server-codex)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/H0wZy/mcp/blob/main/LICENSE)
 
-High-performance **OpenAI Codex MCP Server** connecting any Model Context Protocol client (such as **Claude Code**, **Google Antigravity**, or custom agents) to OpenAI's **GPT-5.6 Terra / GPT-6 Astra** models.
+High-performance **OpenAI Codex MCP Server** connecting any Model Context Protocol client (such as **Claude Code**, **Google Antigravity**, or custom agents) to OpenAI's **GPT-6** models (default `gpt-6-astra`).
 
 Part of the **[H0wZy/mcp](https://github.com/H0wZy/mcp)** multi-agent ecosystem.
 
@@ -13,11 +13,12 @@ Part of the **[H0wZy/mcp](https://github.com/H0wZy/mcp)** multi-agent ecosystem.
 
 | Tool Name | Parameters | Description |
 | :--- | :--- | :--- |
-| `ask_codex` | `question` *(string)* | Cross-verification or second opinion from OpenAI Codex (GPT-5.6 / GPT-6 Astra). |
-| `review_codex` | `diff` *(string)*, `instruction` *(string)* | Structured repository code review from OpenAI Codex inspecting safety, tests, and diffs. |
-| `brainstorm_codex` | `topic` *(string)*, `context` *(string)* | Architectural exploration, trade-offs, and system design ideation with Codex. |
-| `plan_codex` | `goal` *(string)*, `requirements` *(string)* | Step-by-step implementation planning, checklists, and dependency roadmaps. |
-| `delegate_codex` | `prompt` *(string)*, `cwd` *(string)*, `paths` *(string[], optional)*, `model` *(string, optional)*, `timeout_minutes` *(number, 1-60, default 30)* | **Edits files** inside `cwd` (workspace-write sandbox). Hand a self-contained implementation task to Codex and get its final report. Review the diff afterwards. |
+| `configure_codex` | `action` (`get` \| `set` \| `reset` \| `list`), `tier`, `model`, `effort` *(all optional)* | Inspect or change the session's model and reasoning effort; tiers `light` / `balanced` / `deep`. |
+| `ask_codex` | `prompt` *(string)*, `paths`, `model`, `effort` *(optional)* | Independent second opinion or general question for OpenAI Codex. Runs in the read-only sandbox. |
+| `review_codex` | `prompt` *(string)*, `paths`, `model`, `effort` *(optional)* | Structured code review with your focus areas. |
+| `brainstorm_codex` | `prompt` *(string)*, `paths`, `model`, `effort` *(optional)* | Architectural alternatives, trade-offs and a recommendation. |
+| `plan_codex` | `prompt` *(string)*, `paths`, `model`, `effort` *(optional)* | Dependency-ordered implementation plan with file paths and test steps. |
+| `delegate_codex` | `prompt` *(string)*, `cwd` *(string)*, `paths` *(string[], optional)*, `model`, `effort` *(optional)*, `timeout_minutes` *(number, 1-60, default 30)* | **Edits files** inside `cwd` (workspace-write sandbox). Hand a self-contained implementation task to Codex and get its final report. Review the diff afterwards. |
 
 > `delegate_codex` writes to disk and never commits. Review the diff (`git diff`) before keeping its changes.
 

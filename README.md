@@ -11,8 +11,8 @@
 
 Centralize, enhance, and distribute high-performance **MCP (Model Context Protocol)** servers connecting the world's leading AI developer CLIs:
 - **Claude Code** (Anthropic)
-- **OpenAI Codex CLI** (OpenAI GPT-5.6 / GPT-6 Astra)
-- **Google Antigravity** (Gemini 3.1 Pro / Flash)
+- **OpenAI Codex CLI** (GPT-6 family, default GPT-6-Astra)
+- **Google Antigravity** (Gemini, default Gemini 3.8 Flash)
 
 Cross-model code reviews, independent second opinions, and autonomous multi-agent validation — configured effortlessly via an interactive **Golang TUI CLI** and distributed via standalone binaries and `npx @h0wzy/mcp`.
 
@@ -55,12 +55,13 @@ H0wZy/mcp/
 │   ├── ui/                     # Terminal user interface, lilac ASCII banner, and interactive TUI
 │   └── version/                # Background update detector & registry version cache
 ├── servers/                    # Decoupled, host-agnostic MCP servers
-│   ├── antigravity/            # Google Antigravity bridge (Gemini 3.1 Pro / Flash)
-│   ├── codex/                  # OpenAI Codex CLI bridge (GPT-5.6 / GPT-6 Astra)
-│   └── claude/                 # Claude Code bridge
+│   ├── antigravity/            # Google Antigravity bridge (Gemini, default 3.8 Flash)
+│   └── codex/                  # OpenAI Codex CLI bridge (GPT-6, default Astra)
 ├── shared/                     # Reusable core (@h0wzy/mcp-shared)
 │   ├── server.js               # createMcpServer() generic JSON-RPC 2.0 stdio engine
-│   ├── executor.js             # Child process runner with timeouts and buffers
+│   ├── executor.js             # Child process runner: timeouts, tree kill, cancel, output cap
+│   ├── validate.js             # cwd / paths / timeout validation for agent command lines
+│   ├── agent-config.js         # Model & reasoning-effort catalogs, tiers and ceilings
 │   ├── resolver.js             # Cross-platform executable resolver
 │   └── errors.js               # Resilient Quota, HTTP 429 handler & secret/token sanitizer
 ├── npm/                        # Lightweight npx runner wrapper & cross-platform binary installer
@@ -109,9 +110,9 @@ Scanning local AI developer CLIs...
   ✓ Google Antigravity (C:\Users\...\agy.exe)
 
 ? Select MCP bridges to configure:
-  [x] Claude Code -> Google Antigravity (Gemini 3.1 Pro/Flash)
-  [x] Claude Code -> OpenAI Codex (GPT-5.6 / GPT-6 Astra)
-  [ ] OpenAI Codex -> Google Antigravity (Gemini 3.1)
+  [x] Claude Code -> Google Antigravity (Gemini)
+  [x] Claude Code -> OpenAI Codex (GPT-6)
+  [ ] OpenAI Codex -> Google Antigravity (Gemini)
 
 ? Configuration Scope: User (Global across all projects)
 ? Apply configuration now? Yes
@@ -169,8 +170,8 @@ hmcp remove claude-antigravity
 | **Antigravity** | `plan_antigravity` | Structured implementation roadmaps and dependency-ordered execution steps |
 | **Antigravity** | `delegate_antigravity` | **Edits files.** Hands an implementation task to Antigravity inside `cwd` (`prompt`, `cwd`, optional `paths`, `model`, `effort`, `timeout_minutes` 1-60, default 30). Review the diff afterwards |
 | **Codex** | `configure_codex` | **Session control.** Inspect or switch active model and reasoning effort. Supports tiers (`light`, `balanced`, `deep`), explicit models, or custom efforts (`low`..`ultra`). Actions: `get`, `set`, `reset`, `list`. |
-| **Codex** | `ask_codex` | Cross-verification with OpenAI Codex (GPT-5.6 Terra / GPT-6 Astra) |
-| **Codex** | `review_codex` | Structured repository code review from OpenAI Codex |
+| **Codex** | `ask_codex` | Cross-verification with OpenAI Codex (GPT-6-Astra by default). Read-only sandbox |
+| **Codex** | `review_codex` | Structured repository code review from OpenAI Codex. Read-only sandbox |
 | **Codex** | `brainstorm_codex` | Architectural exploration, trade-offs, and system design ideation with Codex |
 | **Codex** | `plan_codex` | Step-by-step implementation planning and checklist generation |
 | **Codex** | `delegate_codex` | **Edits files.** Hands an implementation task to Codex inside `cwd` (workspace-write sandbox; `prompt`, `cwd`, optional `paths`, `model`, `effort`, `timeout_minutes` 1-60, default 30). Review the diff afterwards |
@@ -196,7 +197,7 @@ To keep resource and quota consumption under strict developer control, set optio
 
 > **Delegation tools write to disk.** `delegate_codex` and `delegate_antigravity` run the agent inside the given `cwd` and may create or modify files. They never commit for you: always review the resulting diff (`git diff`) before keeping the changes.
 >
-> **Startup defaults:** Antigravity tools default to `Gemini 3.8 Flash (High)` (override with `AGY_MODEL` / `AGY_EFFORT`). Codex tools default to `gpt-6-astra` / `gpt-5.6-terra` (override with `CODEX_MODEL` / `CODEX_EFFORT`).
+> **Startup defaults:** Antigravity tools default to `Gemini 3.8 Flash (High)` (override with `AGY_MODEL` / `AGY_EFFORT`). Codex tools default to `gpt-6-astra` at `medium` effort (override with `CODEX_MODEL` / `CODEX_EFFORT`). Codex's read-only tools run in Codex's `read-only` sandbox; only `delegate_codex` can write.
 
 
 ---

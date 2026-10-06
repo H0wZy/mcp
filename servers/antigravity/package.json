@@ -1,7 +1,7 @@
 {
   "name": "@h0wzy/mcp-server-antigravity",
   "version": "1.0.6",
-  "description": "Google Antigravity MCP Server connecting any MCP client to Gemini 3.1 Pro / Flash",
+  "description": "Google Antigravity MCP Server connecting any MCP client to Google Antigravity (Gemini)",
   "keywords": [
     "mcp",
     "model-context-protocol",

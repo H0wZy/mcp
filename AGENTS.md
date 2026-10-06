@@ -52,7 +52,7 @@ Current roadmap: `005` model / effort control (merged, unreleased), `006` bidire
 ## Coding rules
 
 **Node (`shared/`, `servers/`)**
-- Node ≥ 20, ES modules, **no runtime dependencies**. Use only `node:*` built-ins.
+- Node ≥ 20, ES modules, **no third-party runtime dependencies**. Use only `node:*` built-ins. The servers depend on `@h0wzy/mcp-shared` (same version, lockstep). From a clone they fall back to `../../../shared` when it isn't installed, so `npm install` is optional for development.
 - Shared logic belongs in `shared/`. If you write the same code in two servers, move it to `shared/` instead.
 - Keep **tool parity**: every target server exposes the same tool family with the same parameter names (`prompt`, `paths`, `cwd`, `model`, `effort`, `timeout_minutes`). A new tool or parameter goes into every server in the same change.
 - Tool `description` and `inputSchema` text is read by LLMs to pick tools. Keep it accurate: correct default models, which tools edit files, which are read-only.
@@ -67,7 +67,8 @@ Current roadmap: `005` model / effort control (merged, unreleased), `006` bidire
 - New code in `cli/config/` and `cli/cmd/` needs tests (use `t.TempDir()` and override `HOME` / `USERPROFILE`).
 
 **Tests**
-- Use `node:test` + `node:assert/strict`. Tests must not need the real `codex`, `agy` or `claude` binaries. Use fake binaries via `CODEX_CLI_PATH` / `AGY_BIN` (and the equivalent for new agents) and assert on the exact argv you expect.
+- Use `node:test` + `node:assert/strict`. Tests must not need the real `codex`, `agy` or `claude` binaries. Use `test/helpers/fake-agent.js` (fake binaries set through `CODEX_CLI_PATH` / `AGY_BIN`; they record argv, stdin and cwd) and assert on the exact argv, as `test/argv.test.js` does. A change to the flags passed to an agent must update that test.
+- Tests that capture `process.stdout.write` must pass through anything that isn't a JSON-RPC line, because the test runner writes there too.
 
 ## Security rules
 
@@ -91,7 +92,7 @@ This repo builds bridges between agents. You may yourself be running *inside* a 
 - All packages share one version. A release bump must update **every** one of these:
   - `package.json`, `shared/package.json`, `servers/codex/package.json`, `servers/antigravity/package.json`, `npm/package.json` (plus any new `servers/*/package.json`)
   - the `version` passed to `createMcpServer` in each `servers/*/src/index.js`
-  - `cli/version/version.go` → `Current`
+  - `cli/version/version.go` → `Current` (a `var`, because release builds overwrite it with goreleaser `-ldflags -X`)
   - the fallback version constants in `npm/bin/h0wzy-mcp.js`
   - the version and download links in `README.md` → "Precompiled Standalone Binaries"
 - Publishing to npm runs on a **published GitHub Release** (`.github/workflows/publish-packages.yml`, OIDC trusted publishing). Pushing to `main` does not publish.

@@ -1,5 +1,5 @@
 // H0wZy/mcp — OpenAI Codex MCP Server
-// Minimal, DRY bridge exposing OpenAI Codex CLI (GPT-5.6 / GPT-6 Astra) to any MCP client.
+// Minimal, DRY bridge exposing OpenAI Codex CLI (GPT-6 family) to any MCP client.
 
 import { dirname } from 'node:path';
 

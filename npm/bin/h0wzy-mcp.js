@@ -10,7 +10,7 @@ import https from 'node:https';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkgPath = join(__dirname, '..', 'package.json');
-let pkgVersion = '1.0.5';
+let pkgVersion = '1.0.6';
 try {
   if (existsSync(pkgPath)) {
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));

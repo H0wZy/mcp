@@ -27,9 +27,9 @@ var listCmd = &cobra.Command{
 			to   string
 			tag  string
 		}{
-			{"claude-antigravity", "Claude Code", "Google Antigravity", "Gemini 3.1 Pro/Flash"},
-			{"claude-codex", "Claude Code", "OpenAI Codex", "GPT-5.6 / GPT-6 Astra"},
-			{"codex-antigravity", "OpenAI Codex", "Google Antigravity", "Gemini 3.1"},
+			{"claude-antigravity", "Claude Code", "Google Antigravity", "Gemini 3.8 Flash (default)"},
+			{"claude-codex", "Claude Code", "OpenAI Codex", "GPT-6-Astra (default)"},
+			{"codex-antigravity", "OpenAI Codex", "Google Antigravity", "Gemini 3.8 Flash (default)"},
 			{"antigravity-codex", "Google Antigravity", "OpenAI Codex", "Agent Bridge"},
 		}
 

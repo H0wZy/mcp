@@ -115,13 +115,13 @@ func RunInteractive() error {
 	var bridgeOptions []huh.Option[string]
 
 	if detectedMap["claude"].Installed && detectedMap["agy"].Installed {
-		bridgeOptions = append(bridgeOptions, huh.NewOption("Claude Code ↔ Google Antigravity (Gemini 3.1 Pro/Flash)", "claude-antigravity"))
+		bridgeOptions = append(bridgeOptions, huh.NewOption("Claude Code ↔ Google Antigravity (Gemini)", "claude-antigravity"))
 	}
 	if detectedMap["claude"].Installed && detectedMap["codex"].Installed {
-		bridgeOptions = append(bridgeOptions, huh.NewOption("Claude Code ↔ OpenAI Codex (GPT-5.6 / GPT-6 Astra)", "claude-codex"))
+		bridgeOptions = append(bridgeOptions, huh.NewOption("Claude Code ↔ OpenAI Codex (GPT-6)", "claude-codex"))
 	}
 	if detectedMap["codex"].Installed && detectedMap["agy"].Installed {
-		bridgeOptions = append(bridgeOptions, huh.NewOption("OpenAI Codex ↔ Google Antigravity (Gemini 3.1)", "codex-antigravity"))
+		bridgeOptions = append(bridgeOptions, huh.NewOption("OpenAI Codex ↔ Google Antigravity (Gemini)", "codex-antigravity"))
 	}
 	if detectedMap["agy"].Installed && detectedMap["codex"].Installed {
 		bridgeOptions = append(bridgeOptions, huh.NewOption("Google Antigravity ↔ OpenAI Codex", "antigravity-codex"))

@@ -19,7 +19,7 @@ builds:
     env:
       - CGO_ENABLED=0
     ldflags:
-      - -s -w -X main.version={{.Version}}
+      - -s -w -X github.com/H0wZy/mcp/cli/version.Current={{.Version}}
 
 archives:
   - id: default

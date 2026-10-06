@@ -1,7 +1,7 @@
 {
   "name": "@h0wzy/mcp-server-codex",
   "version": "1.0.6",
-  "description": "OpenAI Codex MCP Server connecting any MCP client to GPT-5.6 / GPT-6 Astra",
+  "description": "OpenAI Codex MCP Server connecting any MCP client to OpenAI Codex (GPT-6)",
   "keywords": [
     "mcp",
     "model-context-protocol",

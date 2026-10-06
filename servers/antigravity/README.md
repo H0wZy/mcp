@@ -3,7 +3,7 @@
 [![npm](https://img.shields.io/npm/v/%40h0wzy%2Fmcp-server-antigravity?color=CB3837&logo=npm)](https://www.npmjs.com/package/@h0wzy/mcp-server-antigravity)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/H0wZy/mcp/blob/main/LICENSE)
 
-High-performance **Google Antigravity MCP Server** connecting any Model Context Protocol client (such as **Claude Code**, **OpenAI Codex**, or custom agents) to Google Antigravity's **Gemini 3.1 Pro / Flash** models.
+High-performance **Google Antigravity MCP Server** connecting any Model Context Protocol client (such as **Claude Code**, **OpenAI Codex**, or custom agents) to Google Antigravity's models (default **Gemini 3.8 Flash**).
 
 Part of the **[H0wZy/mcp](https://github.com/H0wZy/mcp)** multi-agent ecosystem.
 
@@ -13,15 +13,16 @@ Part of the **[H0wZy/mcp](https://github.com/H0wZy/mcp)** multi-agent ecosystem.
 
 | Tool Name | Parameters | Description |
 | :--- | :--- | :--- |
-| `ask_antigravity` | `question` *(string)* | Independent second opinion or general inquiry from Gemini 3.1 Pro / Flash. |
-| `review_antigravity` | `diff` *(string)*, `instruction` *(string)* | Comprehensive code and security review inspecting correctness, potential regressions, and edge cases. |
-| `brainstorm_antigravity` | `topic` *(string)*, `context` *(string)* | Architectural exploration, trade-offs, and design pattern ideation with Gemini. |
-| `plan_antigravity` | `goal` *(string)*, `requirements` *(string)* | Structured implementation roadmaps with dependency-ordered execution steps. |
-| `delegate_antigravity` | `prompt` *(string)*, `cwd` *(string)*, `paths` *(string[], optional)*, `model` *(string, optional)*, `timeout_minutes` *(number, 1-60, default 30)* | **Edits files** inside `cwd`. Hand a self-contained implementation task to Antigravity and get its final report. Review the diff afterwards. |
+| `configure_antigravity` | `action` (`get` \| `set` \| `reset` \| `list`), `tier`, `model`, `effort` *(all optional)* | Inspect or change the session's model and reasoning effort; tiers `light` / `balanced` / `deep`. |
+| `ask_antigravity` | `prompt` *(string)*, `paths`, `model`, `effort` *(optional)* | Independent second opinion or general question for Google Antigravity. |
+| `review_antigravity` | `prompt` *(string)*, `paths`, `model`, `effort` *(optional)* | Structured code review with your focus areas. |
+| `brainstorm_antigravity` | `prompt` *(string)*, `paths`, `model`, `effort` *(optional)* | Architectural alternatives, trade-offs and a recommendation. |
+| `plan_antigravity` | `prompt` *(string)*, `paths`, `model`, `effort` *(optional)* | Dependency-ordered implementation plan with file paths and test steps. |
+| `delegate_antigravity` | `prompt` *(string)*, `cwd` *(string)*, `paths` *(string[], optional)*, `model`, `effort` *(optional)*, `timeout_minutes` *(number, 1-60, default 30)* | **Edits files** inside `cwd`. Hand a self-contained implementation task to Antigravity and get its final report. Review the diff afterwards. |
 
 > `delegate_antigravity` writes to disk and never commits. Review the diff (`git diff`) before keeping its changes.
 >
-> **Default model:** all Antigravity tools now default to `Gemini 3.8 Flash (High)` (previously Gemini 3.1 Pro). Override per call with `model` or globally with the `AGY_MODEL` env var.
+> **Default model:** `Gemini 3.8 Flash (High)`. Override per call (`model`, `effort`), per session with `configure_antigravity`, or at startup with `AGY_MODEL` / `AGY_EFFORT`.
 
 ---
 
