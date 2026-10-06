@@ -1,8 +1,6 @@
 package config
 
 import (
-	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -21,9 +19,9 @@ func RegisterAntigravityServerCommand(name, command string, args []string) error
 		return err
 	}
 
-	data := make(map[string]interface{})
-	if content, err := os.ReadFile(cfgPath); err == nil {
-		_ = json.Unmarshal(content, &data)
+	data, err := readJSONObject(cfgPath)
+	if err != nil {
+		return err
 	}
 
 	mcpServers, ok := data["mcpServers"].(map[string]interface{})
@@ -42,16 +40,7 @@ func RegisterAntigravityServerCommand(name, command string, args []string) error
 		"args":    formattedArgs,
 	}
 
-	out, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to serialize antigravity config: %w", err)
-	}
-
-	if err := os.MkdirAll(filepath.Dir(cfgPath), 0700); err != nil {
-		return err
-	}
-
-	return os.WriteFile(cfgPath, out, 0600)
+	return writeJSONObject(cfgPath, data)
 }
 
 func RegisterAntigravityServer(name, serverCliPath string) error {
@@ -64,13 +53,12 @@ func UnregisterAntigravityServer(name string) error {
 		return err
 	}
 
-	content, err := os.ReadFile(cfgPath)
-	if err != nil {
+	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
 		return nil
 	}
 
-	var data map[string]interface{}
-	if err := json.Unmarshal(content, &data); err != nil {
+	data, err := readJSONObject(cfgPath)
+	if err != nil {
 		return err
 	}
 
@@ -81,10 +69,5 @@ func UnregisterAntigravityServer(name string) error {
 
 	delete(mcpServers, name)
 
-	out, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(cfgPath, out, 0600)
+	return writeJSONObject(cfgPath, data)
 }

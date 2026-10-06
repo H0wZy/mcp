@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 )
 
@@ -25,35 +24,18 @@ func RegisterCodexServerCommand(name, command string, args []string) error {
 	content := ""
 	if b, err := os.ReadFile(cfgPath); err == nil {
 		content = string(b)
+	} else if !os.IsNotExist(err) {
+		return err
 	}
 
 	argsFormatted := make([]string, len(args))
 	for i, a := range args {
 		argsFormatted[i] = fmt.Sprintf("%q", filepath.ToSlash(a))
 	}
-	sectionHeader := fmt.Sprintf("[mcp_servers.%s]", name)
-	newBlock := fmt.Sprintf("%s\ncommand = %q\nargs = [%s]\n", sectionHeader, command, strings.Join(argsFormatted, ", "))
+	table := "mcp_servers." + name
+	newBlock := fmt.Sprintf("[%s]\ncommand = %q\nargs = [%s]\n", table, command, strings.Join(argsFormatted, ", "))
 
-	// Regex to match existing [mcp_servers.<name>] block up to next section or EOF
-	re := regexp.MustCompile(fmt.Sprintf(`(?ms)^\[mcp_servers\.%s\].*?(?=^\[|\z)`, regexp.QuoteMeta(name)))
-
-	var updated string
-	if re.MatchString(content) {
-		updated = re.ReplaceAllString(content, newBlock)
-	} else {
-		trimmed := strings.TrimRight(content, "\r\n")
-		if trimmed != "" {
-			updated = trimmed + "\n\n" + newBlock
-		} else {
-			updated = newBlock
-		}
-	}
-
-	if err := os.MkdirAll(filepath.Dir(cfgPath), 0700); err != nil {
-		return err
-	}
-
-	return os.WriteFile(cfgPath, []byte(updated), 0600)
+	return writeFileAtomic(cfgPath, []byte(upsertTOMLSection(content, table, newBlock)), 0600)
 }
 
 func RegisterCodexServer(name, serverCliPath string) error {
@@ -67,12 +49,12 @@ func UnregisterCodexServer(name string) error {
 	}
 
 	b, err := os.ReadFile(cfgPath)
-	if err != nil {
+	if os.IsNotExist(err) {
 		return nil
 	}
+	if err != nil {
+		return err
+	}
 
-	re := regexp.MustCompile(fmt.Sprintf(`(?ms)^\[mcp_servers\.%s\].*?(?=^\[|\z)`, regexp.QuoteMeta(name)))
-	updated := re.ReplaceAllString(string(b), "")
-
-	return os.WriteFile(cfgPath, []byte(strings.TrimSpace(updated)+"\n"), 0600)
+	return writeFileAtomic(cfgPath, []byte(removeTOMLSection(string(b), "mcp_servers."+name)), 0600)
 }
