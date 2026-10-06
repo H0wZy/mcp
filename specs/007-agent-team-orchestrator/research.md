@@ -125,14 +125,20 @@ Cost ≈ Σ over teammates of (turns × (system + carried context + new input + 
 
 ## 7. Invocation across harnesses (FR-013a/b)
 
-All three harnesses reserve `@` for file references, so the team workflow is a **skill**: one `SKILL.md` (the open Agent Skills format), installed where each harness discovers skills and invoked with that harness's own trigger. The skill's `description` field also lets each harness pick it up from plain-language requests.
+All three harnesses reserve `@` for file references (in Codex, `@` only selects skills in the ChatGPT app, not in the CLI), so the team workflow is a **skill**: one `SKILL.md` in the open [Agent Skills](https://agentskills.io) format. It is installed where each harness discovers skills and invoked with that harness's own trigger. All three also load a skill on their own when the request matches its `description`.
 
-| Harness | Skill trigger | Where skills are discovered |
-|---|---|---|
-| Claude Code | `/<skill>` | `.claude/skills/<skill>/SKILL.md` (project), `~/.claude/skills/` (user). Claude Code does not read `.agents/`. |
-| Codex | `$<skill>` (per maintainer; **VERIFY**) | `.agents/skills/` in the repo and a user-level dir (**VERIFY** exact path) |
-| Antigravity | its own skill trigger (**VERIFY**) | `.agents/skills/` (this repo's spec-kit `agy` integration installs skills there) |
+Checked against each vendor's official docs on 2026-10-06:
 
-The installer copies one source skill to each detected harness's location. Copy rather than symlink: Windows symlinks need elevated rights or developer mode. `hmcp doctor` reports drift between the copies.
+| Harness | Explicit trigger | Implicit (from `description`) | Project skills | User skills |
+|---|---|---|---|---|
+| Claude Code ([docs](https://code.claude.com/docs/en/skills)) | `/<name>` | yes (opt out: `disable-model-invocation: true`) | `.claude/skills/<name>/` (cwd up to repo root) | `~/.claude/skills/<name>/` |
+| Codex CLI / IDE ([docs](https://learn.chatgpt.com/docs/build-skills)) | `$<name>` (or pick from `/skills`) | yes (opt out: `agents/openai.yaml` → `policy.allow_implicit_invocation: false`) | `.agents/skills/<name>/` (cwd up to repo root) | `$HOME/.agents/skills/<name>/` (admin: `/etc/codex/skills`) |
+| Antigravity CLI `agy` ([docs](https://antigravity.google/docs/skills/)) | `/<name>` (or mention the skill by name; `/skills` lists them) | yes | `.agents/skills/<name>/` | `~/.gemini/antigravity-cli/skills/<name>/` |
+| Antigravity 2.0 / IDE ([docs](https://antigravity.google/docs/skills/)) | `/<name>` | yes | `.agents/skills/<name>/` | `~/.gemini/config/skills/<name>/` |
 
-The skill body should stay short and procedural: when to form a team versus a single `ask_*` call, how to pick tiers per role to save the lead's tokens, the limits, and the `team_*` call sequence (create → spawn → wait loop → collect → shutdown).
+Consequences:
+
+- **A project skill in `.agents/skills/` already reaches Codex and Antigravity.** Claude Code only reads `.claude/skills/`, so the installer must also place a copy there. This also explains why this repo's `speckit-*` skills (in `.agents/skills/`) show up in Antigravity and Codex but not in Claude Code.
+- **Required frontmatter**: Codex requires `name` and `description`. Claude Code and Antigravity require only `description`. Ship both, and keep vendor-specific fields out of the shared file (Claude Code silently ignores unknown fields; claude.ai uploads reject them).
+- **Install by copying, not symlinking**: Windows symlinks need elevated rights or developer mode. `hmcp doctor` reports drift between the copies.
+- **Skill body**: short and procedural. Cover when to form a team versus a single `ask_*` call, how to pick tiers per role to save the lead's tokens, the limits, and the `team_*` call sequence (create → spawn → wait loop → collect → shutdown).

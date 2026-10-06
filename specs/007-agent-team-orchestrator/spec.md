@@ -85,7 +85,7 @@ The lead can ask for the team's status at any moment: each teammate's state (wor
 
 ### User Story 4 - Same workflow from every harness, with each one's own trigger (Priority: P1)
 
-The developer works in whichever harness they prefer and starts or steers a team the way that harness normally invokes a skill: `/` in Claude Code, `$` in Codex, and Antigravity's own skill trigger. They can also just ask in natural language ("put Codex and Antigravity on this, I don't want to spend Claude tokens"). `@` is not used for this, because all three harnesses reserve it for referencing files.
+The developer works in whichever harness they prefer and starts or steers a team the way that harness normally invokes a skill: `/team-skill` in Claude Code, `$team-skill` in Codex, `/team-skill` in Antigravity. They can also just ask in natural language ("put Codex and Antigravity on this, I don't want to spend Claude tokens"). `@` is not used for this, because all three harnesses reserve it for referencing files.
 
 **Why this priority**: The orchestrator only helps if it fits how the developer already works in an interactive session. A command that works in one harness and not in the others breaks the "any agent can lead" promise.
 
@@ -209,7 +209,7 @@ The lead (or developer) can attach a check to a task, for example "the test suit
 
 **Invocation from each harness**
 
-- **FR-013a**: The hub MUST ship one team skill with identical behavior for all three harnesses. The skill MUST be invocable with each harness's native skill trigger (Claude Code `/`, Codex `$`, Antigravity's own trigger) and MUST also be picked up from natural-language requests about delegating to or teaming up with other agents. The design MUST NOT rely on `@`, which all three harnesses reserve for file references.
+- **FR-013a**: The hub MUST ship one team skill with identical behavior for all three harnesses. The skill MUST be invocable with each harness's native skill trigger (`/name` in Claude Code, `$name` in Codex, `/name` in Antigravity) and MUST also be picked up from natural-language requests about delegating to or teaming up with other agents. The design MUST NOT rely on `@`, which all three harnesses reserve for file references.
 - **FR-013b**: The installer MUST install and update the team skill in each detected harness's skill location, and `hmcp doctor` MUST report where it is installed.
 
 **Guardrails**
