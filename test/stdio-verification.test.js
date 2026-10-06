@@ -92,7 +92,7 @@ function queryServer(scriptPath, messages) {
   });
 }
 
-test('Antigravity MCP server answers initialize and lists all 4 tools', async () => {
+test('Antigravity MCP server answers initialize and lists all 6 tools', async () => {
   const responses = await queryServer('./servers/antigravity/bin/cli.js', [
     { jsonrpc: '2.0', id: 1, method: 'initialize' },
     { jsonrpc: '2.0', id: 2, method: 'tools/list' },
@@ -104,15 +104,16 @@ test('Antigravity MCP server answers initialize and lists all 4 tools', async ()
 
   assert.equal(responses[1].id, 2);
   const toolNames = responses[1].result.tools.map((t) => t.name);
+  assert.ok(toolNames.includes('configure_antigravity'), 'Must include configure_antigravity');
   assert.ok(toolNames.includes('ask_antigravity'), 'Must include ask_antigravity');
   assert.ok(toolNames.includes('review_antigravity'), 'Must include review_antigravity');
   assert.ok(toolNames.includes('brainstorm_antigravity'), 'Must include brainstorm_antigravity');
   assert.ok(toolNames.includes('plan_antigravity'), 'Must include plan_antigravity');
   assert.ok(toolNames.includes('delegate_antigravity'), 'Must include delegate_antigravity');
-  assert.equal(toolNames.length, 5);
+  assert.equal(toolNames.length, 6);
 });
 
-test('Codex MCP server answers initialize and lists all 4 tools', async () => {
+test('Codex MCP server answers initialize and lists all 6 tools', async () => {
   const responses = await queryServer('./servers/codex/bin/cli.js', [
     { jsonrpc: '2.0', id: 1, method: 'initialize' },
     { jsonrpc: '2.0', id: 2, method: 'tools/list' },
@@ -124,10 +125,57 @@ test('Codex MCP server answers initialize and lists all 4 tools', async () => {
 
   assert.equal(responses[1].id, 2);
   const toolNames = responses[1].result.tools.map((t) => t.name);
+  assert.ok(toolNames.includes('configure_codex'), 'Must include configure_codex');
   assert.ok(toolNames.includes('ask_codex'), 'Must include ask_codex');
   assert.ok(toolNames.includes('review_codex'), 'Must include review_codex');
   assert.ok(toolNames.includes('brainstorm_codex'), 'Must include brainstorm_codex');
   assert.ok(toolNames.includes('plan_codex'), 'Must include plan_codex');
   assert.ok(toolNames.includes('delegate_codex'), 'Must include delegate_codex');
-  assert.equal(toolNames.length, 5);
+  assert.equal(toolNames.length, 6);
 });
+
+test('configure_antigravity supports get, set tier deep, and reset over stdio', async () => {
+  const responses = await queryServer('./servers/antigravity/bin/cli.js', [
+    { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'configure_antigravity', arguments: { action: 'get' } } },
+    { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'configure_antigravity', arguments: { action: 'set', tier: 'deep' } } },
+    { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'configure_antigravity', arguments: { action: 'reset' } } },
+  ]);
+
+  assert.equal(responses.length, 3);
+  assert.equal(responses[0].id, 1);
+  assert.equal(responses[0].result.isError, false);
+  assert.match(responses[0].result.content[0].text, /Google Antigravity Active Configuration/);
+
+  assert.equal(responses[1].id, 2);
+  assert.equal(responses[1].result.isError, false);
+  assert.match(responses[1].result.content[0].text, /gemini-3.8-flash/);
+  assert.match(responses[1].result.content[0].text, /effort": "high/);
+  assert.match(responses[1].result.content[0].text, /source": "tier:deep/);
+
+  assert.equal(responses[2].id, 3);
+  assert.equal(responses[2].result.isError, false);
+  assert.match(responses[2].result.content[0].text, /source": "startup/);
+});
+
+test('configure_codex supports get, set explicit, and reset over stdio', async () => {
+  const responses = await queryServer('./servers/codex/bin/cli.js', [
+    { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'configure_codex', arguments: { action: 'get' } } },
+    { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'configure_codex', arguments: { action: 'set', model: 'gpt-6-astra', effort: 'high' } } },
+    { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'configure_codex', arguments: { action: 'reset' } } },
+  ]);
+
+  assert.equal(responses.length, 3);
+  assert.equal(responses[0].id, 1);
+  assert.equal(responses[0].result.isError, false);
+  assert.match(responses[0].result.content[0].text, /OpenAI Codex Active Configuration/);
+
+  assert.equal(responses[1].id, 2);
+  assert.equal(responses[1].result.isError, false);
+  assert.match(responses[1].result.content[0].text, /gpt-6-astra/);
+  assert.match(responses[1].result.content[0].text, /effort": "high/);
+
+  assert.equal(responses[2].id, 3);
+  assert.equal(responses[2].result.isError, false);
+  assert.match(responses[2].result.content[0].text, /source": "startup/);
+});
+

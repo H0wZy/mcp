@@ -162,20 +162,42 @@ hmcp remove claude-antigravity
 
 | Provider | Tool Name | Description |
 | :--- | :--- | :--- |
-| **Antigravity** | `ask_antigravity` | Independent second opinion or general inquiry from Gemini 3.1 Pro / Flash |
+| **Antigravity** | `configure_antigravity` | **Session control.** Inspect or switch active model and reasoning effort. Supports tiers (`light`, `balanced`, `deep`), explicit models, or custom efforts (`low`..`max`). Actions: `get`, `set`, `reset`, `list`. |
+| **Antigravity** | `ask_antigravity` | Independent second opinion or general inquiry from Gemini 3.8 Flash / Pro |
 | **Antigravity** | `review_antigravity` | Comprehensive code & security review inspecting correctness, edge cases, and diffs |
 | **Antigravity** | `brainstorm_antigravity` | Architectural exploration, trade-offs, and design patterns with Gemini |
 | **Antigravity** | `plan_antigravity` | Structured implementation roadmaps and dependency-ordered execution steps |
-| **Antigravity** | `delegate_antigravity` | **Edits files.** Hands an implementation task to Antigravity inside `cwd` (`prompt`, `cwd`, optional `paths`, `model`, `timeout_minutes` 1-60, default 30). Review the diff afterwards |
+| **Antigravity** | `delegate_antigravity` | **Edits files.** Hands an implementation task to Antigravity inside `cwd` (`prompt`, `cwd`, optional `paths`, `model`, `effort`, `timeout_minutes` 1-60, default 30). Review the diff afterwards |
+| **Codex** | `configure_codex` | **Session control.** Inspect or switch active model and reasoning effort. Supports tiers (`light`, `balanced`, `deep`), explicit models, or custom efforts (`low`..`ultra`). Actions: `get`, `set`, `reset`, `list`. |
 | **Codex** | `ask_codex` | Cross-verification with OpenAI Codex (GPT-5.6 Terra / GPT-6 Astra) |
 | **Codex** | `review_codex` | Structured repository code review from OpenAI Codex |
 | **Codex** | `brainstorm_codex` | Architectural exploration, trade-offs, and system design ideation with Codex |
 | **Codex** | `plan_codex` | Step-by-step implementation planning and checklist generation |
-| **Codex** | `delegate_codex` | **Edits files.** Hands an implementation task to Codex inside `cwd` (workspace-write sandbox; `prompt`, `cwd`, optional `paths`, `model`, `timeout_minutes` 1-60, default 30). Review the diff afterwards |
+| **Codex** | `delegate_codex` | **Edits files.** Hands an implementation task to Codex inside `cwd` (workspace-write sandbox; `prompt`, `cwd`, optional `paths`, `model`, `effort`, `timeout_minutes` 1-60, default 30). Review the diff afterwards |
+
+### 🎛️ Dynamic Model & Reasoning Effort Control
+
+Claude Code can now autonomously (or on request) escalate or de-escalate reasoning power according to task complexity:
+
+| Tier | Task Type Fit | Antigravity Default | Codex Default |
+| :--- | :--- | :--- | :--- |
+| **`light`** | Quick lookups, summaries, trivial syntax checks | `gemini-3.8-flash` @ `low` | `gpt-6-luna` @ `low` |
+| **`balanced`** | Everyday coding, routine code reviews, checklists | `gemini-3.8-flash` @ `medium` | `gpt-6-astra` @ `medium` |
+| **`deep`** | Complex refactors, architectural trade-offs, security audits | `gemini-3.8-flash` @ `high` | `gpt-6-astra` @ `xhigh` |
+
+Every task execution appends a standardized verification footer confirming the active settings:
+`[codex · model=gpt-6-astra · effort=high · source=tier:deep]`
+
+#### Developer Ceilings & Environment Overrides
+To keep resource and quota consumption under strict developer control, set optional ceilings in your client's environment:
+- `AGY_MAX_EFFORT` / `CODEX_MAX_EFFORT`: Clamps reasoning effort to a maximum level (e.g. `medium`).
+- `AGY_MAX_TIER` / `CODEX_MAX_TIER`: Clamps autonomous model escalation to a maximum tier (e.g. `balanced`).
+- `AGY_TIER_LIGHT` / `CODEX_TIER_DEEP`: Override default tier mappings using `model[:effort]` syntax (e.g. `gpt-6-sol:high`).
 
 > **Delegation tools write to disk.** `delegate_codex` and `delegate_antigravity` run the agent inside the given `cwd` and may create or modify files. They never commit for you: always review the resulting diff (`git diff`) before keeping the changes.
 >
-> **Antigravity default model:** all Antigravity tools now default to `Gemini 3.8 Flash (High)` (previously Gemini 3.1 Pro). Override per call with `model` or globally with the `AGY_MODEL` environment variable.
+> **Startup defaults:** Antigravity tools default to `Gemini 3.8 Flash (High)` (override with `AGY_MODEL` / `AGY_EFFORT`). Codex tools default to `gpt-6-astra` / `gpt-5.6-terra` (override with `CODEX_MODEL` / `CODEX_EFFORT`).
+
 
 ---
 

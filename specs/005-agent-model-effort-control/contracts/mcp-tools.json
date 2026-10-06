@@ -1,0 +1,216 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MCP Tool Contracts for 005 Agent Model & Effort Control",
+  "servers": {
+    "antigravity": {
+      "tools": [
+        {
+          "name": "configure_antigravity",
+          "description": "Inspect or change Google Antigravity model and reasoning effort for the current session. Supports tiers ('light' for quick lookups/trivial tasks, 'balanced' for routine reviews/planning, 'deep' for hard bugs/complex architectures/security), explicit models, or custom efforts ('low'|'medium'|'high'|'xhigh'|'max'). Actions: 'get' (view current), 'set' (apply new settings), 'reset' (restore startup defaults), 'list' (catalog). Claude Code may switch tiers autonomously based on task difficulty.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": ["get", "set", "reset", "list"],
+                "default": "get",
+                "description": "Action to perform. Default is 'get' (read current configuration and options without changing state)."
+              },
+              "tier": {
+                "type": "string",
+                "enum": ["light", "balanced", "deep"],
+                "description": "Preset tier: 'light' (Gemini Flash Low), 'balanced' (Gemini Flash Medium), 'deep' (Gemini Flash High)."
+              },
+              "model": {
+                "type": "string",
+                "description": "Model family or variant identifier (e.g. 'gemini-3.8-flash', 'gemini-3.1-pro', 'Gemini 3.8 Flash (High)')."
+              },
+              "effort": {
+                "type": "string",
+                "enum": ["low", "medium", "high", "xhigh", "max"],
+                "description": "Desired reasoning effort level. Auto-mapped to supported levels for the target model family."
+              }
+            }
+          }
+        },
+        {
+          "name": "ask_antigravity",
+          "description": "Get an INDEPENDENT second opinion or general answer from Google Antigravity. Uses the session-configured model & effort by default (startup: Gemini 3.8 Flash High).",
+          "inputSchema": {
+            "type": "object",
+            "required": ["prompt"],
+            "properties": {
+              "prompt": { "type": "string", "description": "The question or inquiry." },
+              "paths": { "type": "array", "items": { "type": "string" }, "description": "Optional file/folder paths to read as context." },
+              "model": { "type": "string", "description": "Per-call model override (does not change session default)." },
+              "effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max"], "description": "Per-call reasoning effort override." }
+            }
+          }
+        },
+        {
+          "name": "review_antigravity",
+          "description": "Request a structured code review from Google Antigravity inspecting correctness, bugs, race conditions, security, and architecture. Uses the session-configured model & effort by default.",
+          "inputSchema": {
+            "type": "object",
+            "required": ["prompt"],
+            "properties": {
+              "prompt": { "type": "string", "description": "Specific code review instructions or focus areas." },
+              "paths": { "type": "array", "items": { "type": "string" }, "description": "Files or folders to inspect." },
+              "model": { "type": "string", "description": "Per-call model override." },
+              "effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max"], "description": "Per-call reasoning effort override." }
+            }
+          }
+        },
+        {
+          "name": "brainstorm_antigravity",
+          "description": "Architectural brainstorming and exploration with Google Antigravity. Explores alternative design patterns, trade-offs, and pros/cons. Uses session-configured model & effort by default.",
+          "inputSchema": {
+            "type": "object",
+            "required": ["prompt"],
+            "properties": {
+              "prompt": { "type": "string", "description": "The architectural problem to brainstorm." },
+              "paths": { "type": "array", "items": { "type": "string" }, "description": "Optional context files." },
+              "model": { "type": "string", "description": "Per-call model override." },
+              "effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max"], "description": "Per-call reasoning effort override." }
+            }
+          }
+        },
+        {
+          "name": "plan_antigravity",
+          "description": "Generate a step-by-step implementation plan or execution checklist using Google Antigravity. Uses session-configured model & effort by default.",
+          "inputSchema": {
+            "type": "object",
+            "required": ["prompt"],
+            "properties": {
+              "prompt": { "type": "string", "description": "The feature or refactor goal to break down." },
+              "paths": { "type": "array", "items": { "type": "string" }, "description": "Optional context files." },
+              "model": { "type": "string", "description": "Per-call model override." },
+              "effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max"], "description": "Per-call reasoning effort override." }
+            }
+          }
+        },
+        {
+          "name": "delegate_antigravity",
+          "description": "Hand a self-contained implementation task to Google Antigravity, which EDITS FILES inside cwd. Uses session-configured model & effort by default.",
+          "inputSchema": {
+            "type": "object",
+            "required": ["prompt", "cwd"],
+            "properties": {
+              "prompt": { "type": "string", "description": "The task instructions and acceptance criteria." },
+              "cwd": { "type": "string", "description": "Absolute path of repository to work in." },
+              "paths": { "type": "array", "items": { "type": "string" }, "description": "Optional context files." },
+              "model": { "type": "string", "description": "Per-call model override." },
+              "effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max"], "description": "Per-call reasoning effort override." },
+              "timeout_minutes": { "type": "number", "description": "Max run time, 1-60 (default 30)." }
+            }
+          }
+        }
+      ]
+    },
+    "codex": {
+      "tools": [
+        {
+          "name": "configure_codex",
+          "description": "Inspect or change OpenAI Codex model and reasoning effort for the current session. Supports tiers ('light' for quick lookups/trivial tasks, 'balanced' for routine work, 'deep' for complex refactoring/architecture/security), explicit models, or custom efforts ('low'|'medium'|'high'|'xhigh'|'max'|'ultra'). Actions: 'get' (view current), 'set' (apply new settings), 'reset' (restore startup defaults), 'list' (catalog). Claude Code may switch tiers autonomously based on task difficulty.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": ["get", "set", "reset", "list"],
+                "default": "get",
+                "description": "Action to perform. Default is 'get' (read current configuration and options without changing state)."
+              },
+              "tier": {
+                "type": "string",
+                "enum": ["light", "balanced", "deep"],
+                "description": "Preset tier: 'light' (gpt-6-luna low), 'balanced' (gpt-6-astra medium), 'deep' (gpt-6-astra xhigh)."
+              },
+              "model": {
+                "type": "string",
+                "description": "Model slug (e.g. 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-terra')."
+              },
+              "effort": {
+                "type": "string",
+                "enum": ["low", "medium", "high", "xhigh", "max", "ultra"],
+                "description": "Desired reasoning effort level. Auto-mapped to supported levels for the target model."
+              }
+            }
+          }
+        },
+        {
+          "name": "ask_codex",
+          "description": "Ask OpenAI Codex CLI for an independent second opinion, reasoning check, or advice. Uses session-configured model & effort by default.",
+          "inputSchema": {
+            "type": "object",
+            "required": ["prompt"],
+            "properties": {
+              "prompt": { "type": "string", "description": "The instruction or question." },
+              "paths": { "type": "array", "items": { "type": "string" }, "description": "Optional context file paths." },
+              "model": { "type": "string", "description": "Per-call model override." },
+              "effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max", "ultra"], "description": "Per-call reasoning effort override." }
+            }
+          }
+        },
+        {
+          "name": "review_codex",
+          "description": "Run a structured code review using OpenAI Codex CLI against the repository or specified files. Uses session-configured model & effort by default.",
+          "inputSchema": {
+            "type": "object",
+            "required": ["prompt"],
+            "properties": {
+              "prompt": { "type": "string", "description": "Specific review instructions or focus areas." },
+              "paths": { "type": "array", "items": { "type": "string" }, "description": "Optional files to review." },
+              "model": { "type": "string", "description": "Per-call model override." },
+              "effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max", "ultra"], "description": "Per-call reasoning effort override." }
+            }
+          }
+        },
+        {
+          "name": "brainstorm_codex",
+          "description": "Architectural brainstorming and ideation using OpenAI Codex. Uses session-configured model & effort by default.",
+          "inputSchema": {
+            "type": "object",
+            "required": ["prompt"],
+            "properties": {
+              "prompt": { "type": "string", "description": "The architectural problem to explore." },
+              "paths": { "type": "array", "items": { "type": "string" }, "description": "Optional context files." },
+              "model": { "type": "string", "description": "Per-call model override." },
+              "effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max", "ultra"], "description": "Per-call reasoning effort override." }
+            }
+          }
+        },
+        {
+          "name": "plan_codex",
+          "description": "Generate a structured, step-by-step implementation plan or execution checklist using OpenAI Codex. Uses session-configured model & effort by default.",
+          "inputSchema": {
+            "type": "object",
+            "required": ["prompt"],
+            "properties": {
+              "prompt": { "type": "string", "description": "The feature or refactoring goal to break down." },
+              "paths": { "type": "array", "items": { "type": "string" }, "description": "Optional context files." },
+              "model": { "type": "string", "description": "Per-call model override." },
+              "effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max", "ultra"], "description": "Per-call reasoning effort override." }
+            }
+          }
+        },
+        {
+          "name": "delegate_codex",
+          "description": "Hand a self-contained implementation task to OpenAI Codex, which EDITS FILES inside cwd. Uses session-configured model & effort by default.",
+          "inputSchema": {
+            "type": "object",
+            "required": ["prompt", "cwd"],
+            "properties": {
+              "prompt": { "type": "string", "description": "The task instructions and acceptance criteria." },
+              "cwd": { "type": "string", "description": "Absolute path of repository to work in." },
+              "paths": { "type": "array", "items": { "type": "string" }, "description": "Optional extra files to read." },
+              "model": { "type": "string", "description": "Per-call model override." },
+              "effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max", "ultra"], "description": "Per-call reasoning effort override." },
+              "timeout_minutes": { "type": "number", "description": "Max run time, 1-60 (default 30)." }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
