@@ -14,8 +14,11 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 async function call(server, name, args) {
   let reply;
   const originalWrite = process.stdout.write;
-  process.stdout.write = (chunk) => {
-    reply = JSON.parse(chunk.toString().trim());
+  // Only swallow the server's JSON-RPC line; the test runner writes here too.
+  process.stdout.write = (chunk, ...rest) => {
+    const text = chunk.toString();
+    if (!text.startsWith('{"jsonrpc"')) return originalWrite.call(process.stdout, chunk, ...rest);
+    reply = JSON.parse(text.trim());
     return true;
   };
   try {

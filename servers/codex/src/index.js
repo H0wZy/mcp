@@ -22,6 +22,15 @@ const {
 
 const TIMEOUT_MS = 300000; // 5 minutes
 
+// Sandbox per tool kind, set through config overrides so `exec` and `review` both honor it.
+// Read-only + never-ask is Codex's documented non-interactive read-only combination.
+const ACCESS_OVERRIDES = {
+  'read-only': ['-c', 'sandbox_mode=read-only', '-c', 'approval_policy=never'],
+  'workspace-write': ['-c', 'sandbox_mode=workspace-write'],
+};
+const READ_ONLY_EXEC_ARGS = ['--ephemeral', '--skip-git-repo-check'];
+const READ_ONLY_ANNOTATIONS = { readOnlyHint: true, openWorldHint: true };
+
 async function loadCodexCatalog() {
   const codexBin = resolveBinary('codex', 'CODEX_CLI_PATH');
   if (!codexBin) return null;
@@ -71,7 +80,7 @@ async function executeCodexCommand(
   model,
   effort,
   extraArgs = [],
-  { cwd, requireCwd = false, timeoutMs = TIMEOUT_MS, signal } = {}
+  { cwd, requireCwd = false, access = 'read-only', timeoutMs = TIMEOUT_MS, signal } = {}
 ) {
   if (!prompt) {
     return { text: 'Missing required argument: prompt', isError: true };
@@ -112,6 +121,7 @@ async function executeCodexCommand(
     `model=${snapshot.cliModel}`,
     '-c',
     `model_reasoning_effort=${snapshot.cliEffort}`,
+    ...ACCESS_OVERRIDES[access],
     '-',
   ];
 
@@ -240,9 +250,10 @@ export const configureCodexTool = {
 export const askCodexTool = {
   name: 'ask_codex',
   description:
-    'Ask OpenAI Codex CLI for an independent second opinion, reasoning check, or advice. ' +
+    'Ask OpenAI Codex CLI for an independent second opinion, reasoning check, or advice (read-only sandbox). ' +
     'Uses session-configured model & effort by default (configure via configure_codex). ' +
     'Provide a `prompt`; optionally pass `paths`, `model`, or `effort`.',
+  annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
     properties: {
@@ -274,7 +285,7 @@ export const askCodexTool = {
       paths,
       model,
       effort,
-      ['--ephemeral', '--skip-git-repo-check', '--approve-for-me'],
+      READ_ONLY_EXEC_ARGS,
       { signal: ctx?.signal }
     ),
 };
@@ -282,8 +293,9 @@ export const askCodexTool = {
 export const reviewCodexTool = {
   name: 'review_codex',
   description:
-    'Run a structured code review using OpenAI Codex CLI against the current repository or specified files. ' +
+    'Run a structured code review using OpenAI Codex CLI against the current repository or specified files (read-only sandbox). ' +
     'Uses session-configured model & effort by default (configure via configure_codex).',
+  annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
     properties: {
@@ -318,6 +330,7 @@ export const brainstormCodexTool = {
     'Architectural brainstorming and ideation using OpenAI Codex. ' +
     'Explores alternative patterns, system trade-offs, and design approaches. ' +
     'Configure model and effort via configure_codex.',
+  annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
     properties: {
@@ -349,7 +362,7 @@ export const brainstormCodexTool = {
       paths,
       model,
       effort,
-      ['--ephemeral', '--skip-git-repo-check', '--approve-for-me'],
+      READ_ONLY_EXEC_ARGS,
       { signal: ctx?.signal }
     ),
 };
@@ -359,6 +372,7 @@ export const planCodexTool = {
   description:
     'Generate a structured, step-by-step implementation plan or execution checklist using OpenAI Codex. ' +
     'Configure model and effort via configure_codex.',
+  annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
     properties: {
@@ -390,7 +404,7 @@ export const planCodexTool = {
       paths,
       model,
       effort,
-      ['--ephemeral', '--skip-git-repo-check', '--approve-for-me'],
+      READ_ONLY_EXEC_ARGS,
       { signal: ctx?.signal }
     ),
 };
@@ -422,6 +436,7 @@ export const delegateCodexTool = {
     executeCodexCommand('exec', prompt, paths, model, effort, ['--ephemeral', '--skip-git-repo-check', '--approve-for-me'], {
       cwd,
       requireCwd: true,
+      access: 'workspace-write',
       timeoutMs: clampTimeoutMinutes(timeout_minutes) * 60000,
       signal: ctx?.signal,
     }),
