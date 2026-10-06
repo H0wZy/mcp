@@ -1,7 +1,6 @@
 // H0wZy/mcp — OpenAI Codex MCP Server
 // Minimal, DRY bridge exposing OpenAI Codex CLI (GPT-5.6 / GPT-6 Astra) to any MCP client.
 
-import { statSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 // Installed from npm, @h0wzy/mcp-shared is a real dependency. Run straight from a
@@ -16,6 +15,9 @@ const {
   executeProcess,
   formatResilientResponse,
   createAgentConfig,
+  validateCwd,
+  normalizePaths,
+  clampTimeoutMinutes,
 } = shared;
 
 const TIMEOUT_MS = 300000; // 5 minutes
@@ -62,9 +64,26 @@ export const agentConfig = createAgentConfig({
   catalogLoader: loadCodexCatalog,
 });
 
-async function executeCodexCommand(subcommand, prompt, paths = [], model, effort, extraArgs = [], { cwd, timeoutMs = TIMEOUT_MS } = {}) {
+async function executeCodexCommand(
+  subcommand,
+  prompt,
+  paths,
+  model,
+  effort,
+  extraArgs = [],
+  { cwd, requireCwd = false, timeoutMs = TIMEOUT_MS, signal } = {}
+) {
   if (!prompt) {
     return { text: 'Missing required argument: prompt', isError: true };
+  }
+
+  let workDir;
+  let contextPaths;
+  try {
+    workDir = cwd !== undefined || requireCwd ? validateCwd(cwd) : undefined;
+    contextPaths = normalizePaths(paths, workDir);
+  } catch (err) {
+    return { text: `❌ ${err.message}`, isError: true };
   }
 
   const snapshot = agentConfig.resolveCall({ model, effort });
@@ -81,8 +100,8 @@ async function executeCodexCommand(subcommand, prompt, paths = [], model, effort
     };
   }
 
-  const fullPrompt = paths.length
-    ? `Context files/directories to inspect in full:\n${paths.map((p) => `- ${p}`).join('\n')}\n\n${prompt}`
+  const fullPrompt = contextPaths.length
+    ? `Context files/directories to inspect in full:\n${contextPaths.map((p) => `- ${p.path}`).join('\n')}\n\n${prompt}`
     : prompt;
 
   // For all subcommands, override model and reasoning effort via -c key=value
@@ -99,19 +118,20 @@ async function executeCodexCommand(subcommand, prompt, paths = [], model, effort
   if (subcommand === 'exec') {
     args.push('--color', 'never', ...extraArgs);
 
-    for (const p of paths) {
-      try {
-        const isDir = statSync(p).isDirectory();
-        args.push('--add-dir', isDir ? p : dirname(p));
-      } catch {
-        /* skip invalid path */
-      }
+    for (const p of contextPaths) {
+      if (p.isDir !== null) args.push('--add-dir', p.isDir ? p.path : dirname(p.path));
     }
 
-    if (cwd) args.push('-C', cwd);
+    if (workDir) args.push('-C', workDir);
   }
 
-  const res = await executeProcess(codexBin, args, { cwd, timeoutMs, toolName: 'codex', input: fullPrompt });
+  const res = await executeProcess(codexBin, args, {
+    cwd: workDir,
+    timeoutMs,
+    signal,
+    toolName: 'codex',
+    input: fullPrompt,
+  });
   const footer = agentConfig.formatFooter(snapshot);
 
   if (res.ok) {
@@ -141,6 +161,7 @@ export const configureCodexTool = {
     'explicit models (e.g. "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-terra"), or custom efforts ("low"|"medium"|"high"|"xhigh"|"max"|"ultra"). ' +
     'Actions: "get" (view active settings), "set" (apply updates), "reset" (restore startup defaults), "list" (catalog & tiers). ' +
     'Claude Code may switch tiers autonomously based on task difficulty.',
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   inputSchema: {
     type: 'object',
     properties: {
@@ -246,12 +267,16 @@ export const askCodexTool = {
     },
     required: ['prompt'],
   },
-  handler: ({ prompt, paths, model, effort }) =>
-    executeCodexCommand('exec', prompt, paths, model, effort, [
-      '--ephemeral',
-      '--skip-git-repo-check',
-      '--approve-for-me',
-    ]),
+  handler: ({ prompt, paths, model, effort }, ctx) =>
+    executeCodexCommand(
+      'exec',
+      prompt,
+      paths,
+      model,
+      effort,
+      ['--ephemeral', '--skip-git-repo-check', '--approve-for-me'],
+      { signal: ctx?.signal }
+    ),
 };
 
 export const reviewCodexTool = {
@@ -283,8 +308,8 @@ export const reviewCodexTool = {
     },
     required: ['prompt'],
   },
-  handler: ({ prompt, paths, model, effort }) =>
-    executeCodexCommand('review', prompt, paths, model, effort),
+  handler: ({ prompt, paths, model, effort }, ctx) =>
+    executeCodexCommand('review', prompt, paths, model, effort, [], { signal: ctx?.signal }),
 };
 
 export const brainstormCodexTool = {
@@ -317,14 +342,15 @@ export const brainstormCodexTool = {
     },
     required: ['prompt'],
   },
-  handler: ({ prompt, paths, model, effort }) =>
+  handler: ({ prompt, paths, model, effort }, ctx) =>
     executeCodexCommand(
       'exec',
       `You are an enterprise software architect. Analyze the problem, brainstorm 2-3 viable architectural alternatives, outline trade-offs and pros/cons for each, and recommend the best path forward.\n\nProblem: ${prompt}`,
       paths,
       model,
       effort,
-      ['--ephemeral', '--skip-git-repo-check', '--approve-for-me']
+      ['--ephemeral', '--skip-git-repo-check', '--approve-for-me'],
+      { signal: ctx?.signal }
     ),
 };
 
@@ -357,14 +383,15 @@ export const planCodexTool = {
     },
     required: ['prompt'],
   },
-  handler: ({ prompt, paths, model, effort }) =>
+  handler: ({ prompt, paths, model, effort }, ctx) =>
     executeCodexCommand(
       'exec',
       `You are a lead technical planner. Break down the requested goal into structured, dependency-ordered, verifiable implementation tasks with concrete file paths and test steps.\n\nGoal: ${prompt}`,
       paths,
       model,
       effort,
-      ['--ephemeral', '--skip-git-repo-check', '--approve-for-me']
+      ['--ephemeral', '--skip-git-repo-check', '--approve-for-me'],
+      { signal: ctx?.signal }
     ),
 };
 
@@ -374,6 +401,7 @@ export const delegateCodexTool = {
     'Hand a self-contained implementation task to OpenAI Codex, which EDITS FILES inside `cwd` ' +
     '(workspace-write sandbox, approvals routed to automatic review). Review the diff afterwards. Returns the final report from Codex. ' +
     'Configure model and effort via configure_codex.',
+  annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   inputSchema: {
     type: 'object',
     properties: {
@@ -390,10 +418,12 @@ export const delegateCodexTool = {
     },
     required: ['prompt', 'cwd'],
   },
-  handler: ({ prompt, cwd, paths, model, effort, timeout_minutes }) =>
+  handler: ({ prompt, cwd, paths, model, effort, timeout_minutes }, ctx) =>
     executeCodexCommand('exec', prompt, paths, model, effort, ['--ephemeral', '--skip-git-repo-check', '--approve-for-me'], {
       cwd,
-      timeoutMs: Math.min(Math.max(Math.round(timeout_minutes || 30), 1), 60) * 60000,
+      requireCwd: true,
+      timeoutMs: clampTimeoutMinutes(timeout_minutes) * 60000,
+      signal: ctx?.signal,
     }),
 };
 

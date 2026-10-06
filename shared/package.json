@@ -17,6 +17,7 @@
     "./resolver": "./resolver.js",
     "./errors": "./errors.js",
     "./agent-config": "./agent-config.js",
+    "./validate": "./validate.js",
     ".": "./index.js"
   },
   "author": "Marcos (H0wZy) <h0wzymarcos@gmail.com>",

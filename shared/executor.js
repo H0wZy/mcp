@@ -1,8 +1,85 @@
 // H0wZy/mcp — Child Process Executor
-// Lazy, minimal, robust process runner with timeout and augmented PATH.
+// Lazy, minimal, robust process runner with timeout, tree kill, output cap and augmented PATH.
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { childEnvWithAugmentedPath } from './resolver.js';
+
+const isWindows = process.platform === 'win32';
+
+export const DEFAULT_TIMEOUT_MS = 180000; // 3 minutes
+export const DEFAULT_MAX_OUTPUT_CHARS = 4 * 1024 * 1024; // per stream
+const EXIT_GRACE_MS = 2000;
+
+// Every running child, so a server shutting down can take its agents with it.
+const activeChildren = new Set();
+
+// cmd.exe expands %VAR% and !VAR! even inside quotes, and a quote or line break
+// would end the argument early, so these can never be passed through it safely.
+const CMD_UNSAFE = /["%!\r\n\0]/;
+// Anything cmd.exe would split on or interpret needs quoting.
+const CMD_NEEDS_QUOTES = /[\s&|<>^(),;=]/;
+
+/**
+ * Quotes one argument for a command line that runs through cmd.exe (.cmd/.bat shims).
+ * Node joins shell arguments with spaces and does no escaping of its own.
+ *
+ * @param {string} arg
+ * @returns {string}
+ * @throws {Error} when the argument contains characters cmd.exe cannot pass through safely
+ */
+export function quoteCmdArg(arg) {
+  const value = String(arg);
+  if (CMD_UNSAFE.test(value)) {
+    throw new Error(
+      `Refusing to pass ${JSON.stringify(value)} to a .cmd/.bat program: it contains a quote, %, ! or a line break.`
+    );
+  }
+  if (value === '') return '""';
+  if (!CMD_NEEDS_QUOTES.test(value)) return value;
+  // Double trailing backslashes so the C runtime does not read \" as an escaped quote.
+  return `"${value.replace(/(\\+)$/, '$1$1')}"`;
+}
+
+/**
+ * Kills a child and everything it started: its process group on POSIX, its process
+ * tree on Windows. Safe to call more than once.
+ *
+ * @param {import('node:child_process').ChildProcess} child
+ */
+export function killProcessTree(child) {
+  if (!child || !child.pid) return;
+  if (isWindows) {
+    spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+    return;
+  }
+  try {
+    process.kill(-child.pid, 'SIGKILL');
+  } catch {
+    try {
+      child.kill('SIGKILL');
+    } catch {
+      /* already gone */
+    }
+  }
+}
+
+/**
+ * Kills every child started by executeProcess that is still running.
+ */
+export function killAllChildren() {
+  for (const child of activeChildren) killProcessTree(child);
+}
+
+function appendCapped(current, chunk, max) {
+  const next = current + chunk;
+  // Trim with some slack so long outputs are not re-sliced on every chunk.
+  return next.length > max * 1.25 ? { text: next.slice(-max), cut: true } : { text: next, cut: false };
+}
+
+function finalizeOutput(text, truncated, max) {
+  if (!truncated) return text.trim();
+  return `[output truncated: showing the last ${max} characters]\n${text.slice(-max).trim()}`;
+}
 
 /**
  * Spawns a process with timeout, path augmentation, and output capture.
@@ -12,82 +89,135 @@ import { childEnvWithAugmentedPath } from './resolver.js';
  * @param {Object} [options={}]
  * @param {string} [options.cwd] Current working directory
  * @param {NodeJS.ProcessEnv} [options.env] Extra environment variables
- * @param {number} [options.timeoutMs=180000] Timeout in ms (default: 3 minutes)
+ * @param {number} [options.timeoutMs=180000] Timeout in ms; non-finite or non-positive values use the default
  * @param {string} [options.toolName] Tool name to augment PATH for
  * @param {string} [options.input] Text written to stdin (keeps long prompts out of argv, which cmd.exe re-splits)
- * @returns {Promise<{ exitCode: number, stdout: string, stderr: string, ok: boolean, timedOut: boolean }>}
+ * @param {AbortSignal} [options.signal] Aborting kills the process tree (e.g. on MCP notifications/cancelled)
+ * @param {number} [options.maxOutputChars] Per-stream cap; the tail is kept, since agents print their answer last
+ * @returns {Promise<{ exitCode: number, stdout: string, stderr: string, ok: boolean, timedOut: boolean, cancelled: boolean }>}
  */
 export function executeProcess(command, args = [], options = {}) {
   return new Promise((resolve) => {
     const {
       cwd = process.cwd(),
       env = {},
-      timeoutMs = 180000,
       toolName,
       input,
+      signal,
+      maxOutputChars = DEFAULT_MAX_OUTPUT_CHARS,
     } = options;
+    const timeoutMs =
+      Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? options.timeoutMs : DEFAULT_TIMEOUT_MS;
+
+    const fail = (message, extra = {}) =>
+      resolve({ exitCode: -1, stdout: '', stderr: message, ok: false, timedOut: false, cancelled: false, ...extra });
+
+    if (signal?.aborted) {
+      fail('Cancelled before start', { cancelled: true });
+      return;
+    }
 
     const childEnv = {
       ...childEnvWithAugmentedPath(toolName),
       ...env,
     };
 
-    const isWindows = process.platform === 'win32';
     // On Windows, running .cmd or .bat without a shell will fail in spawn
-    const needsShell = isWindows && (command.toLowerCase().endsWith('.cmd') || command.toLowerCase().endsWith('.bat'));
+    const needsShell = isWindows && /\.(cmd|bat)$/i.test(command);
+    let spawnCommand = command;
+    let spawnArgs = args;
+    if (needsShell) {
+      try {
+        spawnCommand = quoteCmdArg(command);
+        spawnArgs = args.map(quoteCmdArg);
+      } catch (err) {
+        fail(err.message);
+        return;
+      }
+    }
 
     let stdout = '';
     let stderr = '';
+    let stdoutCut = false;
+    let stderrCut = false;
     let timedOut = false;
+    let cancelled = false;
+    let settled = false;
 
-    const child = spawn(command, args, {
-      cwd,
-      env: childEnv,
-      stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
-      shell: needsShell,
-    });
+    let child;
+    try {
+      child = spawn(spawnCommand, spawnArgs, {
+        cwd,
+        env: childEnv,
+        stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+        shell: needsShell,
+        // Own process group on POSIX so a timeout or cancel can kill grandchildren too.
+        detached: !isWindows,
+        windowsHide: true,
+      });
+    } catch (err) {
+      fail(err.message);
+      return;
+    }
+    activeChildren.add(child);
 
-    const timer = timeoutMs > 0
-      ? setTimeout(() => {
-          timedOut = true;
-          try {
-            child.kill('SIGKILL');
-          } catch {
-            /* ignore kill failure if already exited */
-          }
-        }, timeoutMs)
-      : null;
+    const onAbort = () => {
+      cancelled = true;
+      killProcessTree(child);
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
 
-    if (input !== undefined) child.stdin.end(input);
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killProcessTree(child);
+    }, timeoutMs);
 
+    const finish = (code, spawnError) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      activeChildren.delete(child);
+      resolve({
+        exitCode: code ?? -1,
+        stdout: finalizeOutput(stdout, stdoutCut, maxOutputChars),
+        stderr: finalizeOutput(stderr || spawnError || '', stderrCut, maxOutputChars),
+        ok: code === 0 && !timedOut && !cancelled,
+        timedOut,
+        cancelled,
+      });
+    };
+
+    if (input !== undefined) {
+      child.stdin.on('error', () => {
+        /* child exited before reading all input; the exit code tells the story */
+      });
+      child.stdin.end(input);
+    }
+
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk) => {
-      stdout += chunk;
+      const next = appendCapped(stdout, chunk, maxOutputChars);
+      stdout = next.text;
+      stdoutCut ||= next.cut;
     });
-
     child.stderr.on('data', (chunk) => {
-      stderr += chunk;
+      const next = appendCapped(stderr, chunk, maxOutputChars);
+      stderr = next.text;
+      stderrCut ||= next.cut;
     });
 
-    child.on('error', (err) => {
-      if (timer) clearTimeout(timer);
-      resolve({
-        exitCode: -1,
-        stdout,
-        stderr: stderr || err.message,
-        ok: false,
-        timedOut,
-      });
-    });
-
-    child.on('close', (code) => {
-      if (timer) clearTimeout(timer);
-      resolve({
-        exitCode: code ?? 0,
-        stdout: stdout.trim(),
-        stderr: stderr.trim(),
-        ok: code === 0 && !timedOut,
-        timedOut,
-      });
+    child.on('error', (err) => finish(null, err.message));
+    child.on('close', (code) => finish(code));
+    // 'close' waits for stdout/stderr to close, which a leftover grandchild holding the
+    // pipe can delay forever. Settle shortly after the process itself exits.
+    child.on('exit', (code) => {
+      setTimeout(() => {
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        finish(code);
+      }, EXIT_GRACE_MS).unref();
     });
   });
 }

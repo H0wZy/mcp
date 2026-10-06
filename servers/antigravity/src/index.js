@@ -1,7 +1,6 @@
 // H0wZy/mcp — Antigravity MCP Server
 // Minimal, DRY bridge exposing Google Antigravity (Gemini 3.8 Flash / Pro) to any MCP client.
 
-import { statSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 // Installed from npm, @h0wzy/mcp-shared is a real dependency. Run straight from a
@@ -16,6 +15,9 @@ const {
   executeProcess,
   formatResilientResponse,
   createAgentConfig,
+  validateCwd,
+  normalizePaths,
+  clampTimeoutMinutes,
 } = shared;
 
 const TIMEOUT_MS = 300000; // 5 minutes
@@ -70,9 +72,18 @@ export const agentConfig = createAgentConfig({
   catalogLoader: loadAgyCatalog,
 });
 
-async function executeAgyPrompt({ prompt, prefix = '', paths = [], model, effort, cwd, timeoutMinutes = 5 }) {
+async function executeAgyPrompt({ prompt, prefix = '', paths, model, effort, cwd, requireCwd = false, timeoutMinutes = 5, signal }) {
   if (!prompt) {
     return { text: 'Missing required argument: prompt', isError: true };
+  }
+
+  let workDir;
+  let contextPaths;
+  try {
+    workDir = cwd !== undefined || requireCwd ? validateCwd(cwd) : undefined;
+    contextPaths = normalizePaths(paths, workDir);
+  } catch (err) {
+    return { text: `❌ ${err.message}`, isError: true };
   }
 
   const snapshot = agentConfig.resolveCall({ model, effort });
@@ -90,18 +101,14 @@ async function executeAgyPrompt({ prompt, prefix = '', paths = [], model, effort
     };
   }
 
-  const dirs = new Set(cwd ? [cwd] : []);
-  for (const p of paths) {
-    try {
-      dirs.add(statSync(p).isDirectory() ? p : dirname(p));
-    } catch {
-      /* skip unreadable path */
-    }
+  const dirs = new Set(workDir ? [workDir] : []);
+  for (const p of contextPaths) {
+    if (p.isDir !== null) dirs.add(p.isDir ? p.path : dirname(p.path));
   }
 
   const formattedPrompt = prefix ? `${prefix}\n\n${prompt}` : prompt;
-  const fullPrompt = paths.length
-    ? `Context files/folders to read and consider in full:\n${paths.map((p) => `- ${p}`).join('\n')}\n\n${formattedPrompt}`
+  const fullPrompt = contextPaths.length
+    ? `Context files/folders to read and consider in full:\n${contextPaths.map((p) => `- ${p.path}`).join('\n')}\n\n${formattedPrompt}`
     : formattedPrompt;
 
   const args = [
@@ -121,8 +128,9 @@ async function executeAgyPrompt({ prompt, prefix = '', paths = [], model, effort
   for (const d of dirs) args.push('--add-dir', d);
 
   const res = await executeProcess(agyBin, args, {
-    cwd,
-    timeoutMs: cwd ? timeoutMinutes * 60000 + 30000 : TIMEOUT_MS,
+    cwd: workDir,
+    timeoutMs: workDir ? timeoutMinutes * 60000 + 30000 : TIMEOUT_MS,
+    signal,
     toolName: 'agy',
   });
 
@@ -155,6 +163,7 @@ export const configureAntigravityTool = {
     'explicit models (e.g. "gemini-3.8-flash", "gemini-3.1-pro"), or custom efforts ("low"|"medium"|"high"|"xhigh"|"max"). ' +
     'Actions: "get" (view active settings), "set" (apply updates), "reset" (restore startup defaults), "list" (catalog & tiers). ' +
     'Claude Code may switch tiers autonomously based on task difficulty.',
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   inputSchema: {
     type: 'object',
     properties: {
@@ -237,6 +246,7 @@ export const askAntigravityTool = {
     '(default model: Gemini 3.8 Flash High; configure via configure_antigravity). ' +
     'A different model family than Claude or OpenAI, ensuring an unbiased cross-check. ' +
     'Provide a `prompt`; optionally pass `paths`, `model`, or `effort`.',
+  annotations: { openWorldHint: true },
   inputSchema: {
     type: 'object',
     properties: {
@@ -261,7 +271,8 @@ export const askAntigravityTool = {
     },
     required: ['prompt'],
   },
-  handler: (args) => executeAgyPrompt(args),
+  handler: ({ prompt, paths, model, effort }, ctx) =>
+    executeAgyPrompt({ prompt, paths, model, effort, signal: ctx?.signal }),
 };
 
 export const reviewAntigravityTool = {
@@ -270,6 +281,7 @@ export const reviewAntigravityTool = {
     'Request a thorough, structured code review from Google Antigravity (default model: Gemini 3.8 Flash High). ' +
     'Inspects code correctness, edge cases, race conditions, security vulnerabilities, performance, and architecture. ' +
     'Use tier "deep" via configure_antigravity for complex security/architecture reviews.',
+  annotations: { openWorldHint: true },
   inputSchema: {
     type: 'object',
     properties: {
@@ -294,9 +306,13 @@ export const reviewAntigravityTool = {
     },
     required: ['prompt'],
   },
-  handler: (args) =>
+  handler: ({ prompt, paths, model, effort }, ctx) =>
     executeAgyPrompt({
-      ...args,
+      prompt,
+      paths,
+      model,
+      effort,
+      signal: ctx?.signal,
       prefix:
         'You are performing a comprehensive code review. Focus on bug detection, race conditions, ' +
         'security issues, performance bottlenecks, and architectural clarity. Provide specific recommendations or diffs where helpful.',
@@ -309,6 +325,7 @@ export const brainstormAntigravityTool = {
     'Architectural brainstorming and exploration with Google Antigravity. ' +
     'Explores alternative design patterns, trade-offs, scalability considerations, and pros/cons. ' +
     'Configure model and effort via configure_antigravity.',
+  annotations: { openWorldHint: true },
   inputSchema: {
     type: 'object',
     properties: {
@@ -333,9 +350,13 @@ export const brainstormAntigravityTool = {
     },
     required: ['prompt'],
   },
-  handler: (args) =>
+  handler: ({ prompt, paths, model, effort }, ctx) =>
     executeAgyPrompt({
-      ...args,
+      prompt,
+      paths,
+      model,
+      effort,
+      signal: ctx?.signal,
       prefix:
         'You are a software architect exploring system design options. Analyze the given problem, ' +
         'brainstorm 2-3 viable architectural alternatives, outline trade-offs and pros/cons for each, and recommend the best path forward.',
@@ -347,6 +368,7 @@ export const planAntigravityTool = {
   description:
     'Generate a step-by-step implementation plan or execution checklist using Google Antigravity. ' +
     'Configure model and effort via configure_antigravity.',
+  annotations: { openWorldHint: true },
   inputSchema: {
     type: 'object',
     properties: {
@@ -371,9 +393,13 @@ export const planAntigravityTool = {
     },
     required: ['prompt'],
   },
-  handler: (args) =>
+  handler: ({ prompt, paths, model, effort }, ctx) =>
     executeAgyPrompt({
-      ...args,
+      prompt,
+      paths,
+      model,
+      effort,
+      signal: ctx?.signal,
       prefix:
         'You are a lead technical planner. Break down the requested goal into structured, ' +
         'dependency-ordered, verifiable implementation tasks with concrete file paths and test steps.',
@@ -386,6 +412,7 @@ export const delegateAntigravityTool = {
     'Hand a self-contained implementation task to Google Antigravity, which EDITS FILES inside `cwd` ' +
     '(permissions skipped). Review the diff afterwards. Returns the final report from Antigravity. ' +
     'Configure model and effort via configure_antigravity.',
+  annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   inputSchema: {
     type: 'object',
     properties: {
@@ -402,14 +429,16 @@ export const delegateAntigravityTool = {
     },
     required: ['prompt', 'cwd'],
   },
-  handler: ({ prompt, cwd, paths, model, effort, timeout_minutes }) =>
+  handler: ({ prompt, cwd, paths, model, effort, timeout_minutes }, ctx) =>
     executeAgyPrompt({
       prompt,
       paths,
       model,
       effort,
       cwd,
-      timeoutMinutes: Math.min(Math.max(Math.round(timeout_minutes || 30), 1), 60),
+      requireCwd: true,
+      timeoutMinutes: clampTimeoutMinutes(timeout_minutes),
+      signal: ctx?.signal,
     }),
 };
 
