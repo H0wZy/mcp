@@ -13,7 +13,7 @@
 | Agent Teams concept | How it works in Claude Code | Equivalent here |
 |---|---|---|
 | Team lead | The interactive session that spawned the team | Any host (Claude Code / Codex / Antigravity) calling the orchestrator's `team_*` tools |
-| Teammate | A full Claude Code instance with its own context | A conversation with `claude`, `codex` or `agy`, continued across turns (`--resume <id>`, `codex exec resume <id>`, `agy --conversation <id>`; **VERIFY** agy) |
+| Teammate | A full Claude Code instance with its own context | A conversation with `claude`, `codex` or `agy`, continued across turns (`--resume <id>`, `codex exec resume <id>`, `agy --conversation <id>`, confirmed in `agy --help`) |
 | Shared task list | `~/.claude/tasks/{team}/`, file locking for claims | `<state>/teams/<team>/tasks.json` + exclusive lock file, atomic rename |
 | Mailbox | `~/.claude/teams/{team}/inboxes/{agent}.json` | `<state>/teams/<team>/inboxes/<member>.jsonl` |
 | Idle notification with final answer | Pushed to the lead automatically | Event queue consumed by `team_wait` (long-poll) |
@@ -43,7 +43,13 @@ A new MCP server (`servers/team`, name TBD) that any host can use. It owns state
   "claim_next": true }
 ```
 
-Each agent can be forced to emit this: Claude Code `--json-schema`, Antigravity `--json-schema` (**VERIFY**), Codex `--output-schema` (**VERIFY**). Without that, a fenced-JSON fallback parser does the job.
+Each agent can be forced to emit this: Claude Code `--json-schema`, Antigravity `--json-schema` (confirmed in `agy --help`; with `--output-format json` the result lands in `structured_output`), Codex `--output-schema <FILE>` (confirmed in `codex exec --help`; `-o <FILE>` also writes the last message to a file). Without that, a fenced-JSON fallback parser does the job.
+
+Other confirmed CLI features that fit teammates (2026-10-07):
+- **Isolation (US7)**: Codex `--worktree` runs a session in a new managed git worktree.
+- **Long-lived teammates**: `agy --input-format stream-json --output-format stream-json` keeps one process and runs a turn per NDJSON line on stdin. Each turn ends with its own `result` event, which is faster than re-spawning with `--conversation`.
+- **Scoped teammates**: Antigravity custom agents (`--agent <name>`, `tools:` in the frontmatter) can limit a teammate's tools.
+- **Cost (section 4)**: `agy --output-format json` reports `usage` tokens per run, and Codex `--json` emits token counts.
 
 - ✅ Vendor-neutral lead. The orchestrator owns all task-status changes, which fixes Agent Teams' "status lags" limitation (FR-011). Teammates have no team tools, so they can't spawn teams by construction (FR-017). Deterministic and testable with fake CLIs.
 - ❌ Messages land at the next turn, not mid-turn. Coordination is only as smart as the lead.
