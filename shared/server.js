@@ -128,38 +128,37 @@ export function createMcpServer({ name, version, tools = [], host }) {
         const controller = new AbortController();
         if (id !== undefined) inFlight.set(id, controller);
         let outcome = 'failed';
+        let reply = null;
 
         try {
           const result = await tool.handler(args, { signal: controller.signal, hop });
-          // A cancelled request gets no response (MCP cancellation rules).
           if (controller.signal.aborted) {
             outcome = 'cancelled';
-            return;
+          } else {
+            const text = typeof result === 'string' ? result : result.text || '';
+            const isError = typeof result === 'string' ? false : Boolean(result.isError);
+            outcome = (typeof result === 'object' && result.outcome) || (isError ? 'failed' : 'ran');
+            reply = { content: [{ type: 'text', text: withTrace(text) }], isError };
           }
-          const text = typeof result === 'string' ? result : result.text || '';
-          const isError = typeof result === 'string' ? false : Boolean(result.isError);
-          outcome = (typeof result === 'object' && result.outcome) || (isError ? 'failed' : 'ran');
-          return ok(id, {
-            content: [{ type: 'text', text: withTrace(text) }],
-            isError,
-          });
         } catch (err) {
           if (controller.signal.aborted) {
             outcome = 'cancelled';
-            return;
+          } else {
+            const formatted = formatResilientResponse({
+              provider: name,
+              rawOutput: err?.message || String(err),
+            });
+            reply = { content: [{ type: 'text', text: withTrace(formatted.text) }], isError: true };
           }
-          const formatted = formatResilientResponse({
-            provider: name,
-            rawOutput: err?.message || String(err),
-          });
-          return ok(id, {
-            content: [{ type: 'text', text: withTrace(formatted.text) }],
-            isError: true,
-          });
         } finally {
           inFlight.delete(id);
+          // Before replying: the caller may act on the reply (and look at the agent
+          // registry) as soon as it arrives.
           hop?.finish(outcome);
         }
+        // A cancelled request gets no response (MCP cancellation rules).
+        if (reply) return ok(id, reply);
+        return;
       }
 
       default:

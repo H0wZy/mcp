@@ -1,7 +1,8 @@
 // Fake `codex` / `agy` binaries for tests: they record argv and stdin and answer
 // without touching any real model. Behaviour is driven by environment variables
 // that the servers pass through to the agents they spawn (FAKE_AGENT_LOG,
-// FAKE_AGENT_MODE=sleep, FAKE_AGENT_PIDFILE, FAKE_AGENT_STDERR).
+// FAKE_AGENT_MODE=sleep|bridge, FAKE_AGENT_PIDFILE, FAKE_AGENT_STDERR, FAKE_BRIDGE_PLAN,
+// FAKE_AGENT_STRIP_ENV).
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,9 +22,47 @@ const done = () => {
   }
   if (process.env.FAKE_AGENT_PIDFILE) fs.writeFileSync(process.env.FAKE_AGENT_PIDFILE, String(process.pid));
   if (process.env.FAKE_AGENT_MODE === 'sleep') { setTimeout(() => {}, 60000); return; }
+  if (process.env.FAKE_AGENT_MODE === 'bridge') { bridge(); return; }
   if (process.env.FAKE_AGENT_STDERR) process.stderr.write(process.env.FAKE_AGENT_STDERR);
   process.stdout.write('fake agent answer');
 };
+// Bridge mode: act like an agent that uses an MCP bridge itself. FAKE_BRIDGE_PLAN maps
+// this agent's name to { server, host, tool }; every agent in a chain keeps delegating,
+// which is exactly the runaway loop the guard must stop.
+function bridge() {
+  const path = require('node:path');
+  const { spawn } = require('node:child_process');
+  const me = path.basename(process.argv[1]).replace(/\\.js$/, '');
+  const level = Number(process.env.FAKE_NEST_LEVEL || 0) + 1;
+  const step = JSON.parse(process.env.FAKE_BRIDGE_PLAN || '{}')[me];
+  if (level > 6) { process.stdout.write('RUNAWAY'); return; }
+  if (!step) { process.stdout.write('fake ' + me + ' did the work'); return; }
+  const env = { ...process.env, FAKE_NEST_LEVEL: String(level) };
+  if (process.env.FAKE_AGENT_STRIP_ENV === '1') {
+    for (const k of ['H0WZY_MCP_RUN_ID', 'H0WZY_MCP_CHAIN', 'H0WZY_MCP_DEPTH', 'H0WZY_MCP_DEADLINE']) delete env[k];
+  }
+  const server = spawn(process.execPath, [step.server, '--host', step.host], { env, stdio: ['pipe', 'pipe', 'ignore'] });
+  let buf = '';
+  server.stdout.setEncoding('utf8');
+  server.stdout.on('data', (chunk) => {
+    buf += chunk;
+    let i;
+    while ((i = buf.indexOf('\\n')) >= 0) {
+      const line = buf.slice(0, i);
+      buf = buf.slice(i + 1);
+      let msg;
+      try { msg = JSON.parse(line); } catch { continue; }
+      if (msg.id === 2) {
+        const text = msg.result ? msg.result.content[0].text : JSON.stringify(msg.error);
+        process.stdout.write('fake ' + me + ' asked ' + step.tool + ':\\n' + text);
+        server.stdin.end();
+      }
+    }
+  });
+  const send = (m) => server.stdin.write(JSON.stringify(m) + '\\n');
+  send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } });
+  send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: step.tool, arguments: { prompt: 'keep delegating forever' } } });
+}
 if (process.stdin.isTTY || process.stdin.readableEnded) done();
 else { process.stdin.on('end', done); process.stdin.on('error', done); setTimeout(done, 1500).unref(); }
 `;
