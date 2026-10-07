@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/huh"
@@ -44,5 +45,25 @@ func TestCustomThemeAndKeyMap(t *testing.T) {
 	err := huh.ErrUserAborted
 	if !errors.Is(err, huh.ErrUserAborted) {
 		t.Errorf("Expected errors.Is to match ErrUserAborted")
+	}
+}
+
+func TestBridgeOptionsCoverEveryDirection(t *testing.T) {
+	all := bridgeOptionsFor(map[string]bool{"claude": true, "codex": true, "antigravity": true})
+	var got []string
+	for _, o := range all {
+		if o.Key == "" {
+			t.Errorf("option %q has no label", o.Value)
+		}
+		got = append(got, o.Value)
+	}
+	want := "claude-antigravity claude-codex codex-antigravity codex-claude antigravity-codex antigravity-claude"
+	if strings.Join(got, " ") != want {
+		t.Fatalf("options = %v, want %s", got, want)
+	}
+
+	two := bridgeOptionsFor(map[string]bool{"codex": true, "antigravity": true})
+	if len(two) != 2 || two[0].Value != "codex-antigravity" || two[1].Value != "antigravity-codex" {
+		t.Fatalf("codex + antigravity options = %+v", two)
 	}
 }
