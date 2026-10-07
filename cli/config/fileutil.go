@@ -28,10 +28,23 @@ func readJSONObject(path string) (map[string]interface{}, error) {
 	dec := json.NewDecoder(bytes.NewReader(content))
 	dec.UseNumber()
 	if err := dec.Decode(&data); err != nil {
-		return nil, fmt.Errorf("refusing to modify %s: it is not valid JSON (%w); fix or move it and retry", path, err)
+		return nil, &invalidJSONError{path: path, err: err}
 	}
 	return data, nil
 }
+
+// invalidJSONError marks a config file that exists but does not parse. Writers
+// refuse to touch it; readers (doctor) report it and carry on.
+type invalidJSONError struct {
+	path string
+	err  error
+}
+
+func (e *invalidJSONError) Error() string {
+	return fmt.Sprintf("refusing to modify %s: it is not valid JSON (%v); fix or move it and retry", e.path, e.err)
+}
+
+func (e *invalidJSONError) Unwrap() error { return e.err }
 
 func writeJSONObject(path string, data map[string]interface{}) error {
 	out, err := json.MarshalIndent(data, "", "  ")

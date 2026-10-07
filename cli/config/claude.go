@@ -27,6 +27,8 @@ func getClaudeConfigPath(scope string) (string, error) {
 	return filepath.Join(home, ".claude.json"), nil
 }
 
+// RegisterClaudeServerCommand writes a stdio MCP server into Claude Code's config.
+// "--host claude" is appended to args so the bridge knows which agent runs it.
 func RegisterClaudeServerCommand(name, command string, args []string, scope string) error {
 	cfgPath, err := getClaudeConfigPath(scope)
 	if err != nil {
@@ -47,7 +49,7 @@ func RegisterClaudeServerCommand(name, command string, args []string, scope stri
 	mcpServers[name] = map[string]interface{}{
 		"type":    "stdio",
 		"command": command,
-		"args":    args,
+		"args":    withHostArg(args, AgentClaude),
 	}
 
 	return writeJSONObject(cfgPath, data)

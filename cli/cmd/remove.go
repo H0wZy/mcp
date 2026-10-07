@@ -2,9 +2,9 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/H0wZy/mcp/cli/config"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -13,59 +13,31 @@ var removeScope string
 var removeCmd = &cobra.Command{
 	Use:   "remove <bridge-name>",
 	Short: "Unregister and remove an MCP bridge from host agent configuration",
-	Args:  cobra.ExactArgs(1),
+	Long: "Remove a bridge from its host's config. Bridge names: " + strings.Join(config.BridgeNames(), ", ") + ".\n" +
+		"--scope only applies to Claude Code hosts (claude-*).",
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		bridge := args[0]
-
-		successStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#04B575"))
-		agentStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFFFF"))
-		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
-
-		switch bridge {
-		case "claude-antigravity":
-			if err := config.UnregisterClaudeServer("antigravity", removeScope); err != nil {
-				return err
-			}
-			fmt.Printf("  %s Removed %s from %s configuration %s\n",
-				successStyle.Render("✓"),
-				agentStyle.Render("antigravity"),
-				agentStyle.Render("Claude Code"),
-				dimStyle.Render("("+removeScope+" scope)"),
-			)
-		case "claude-codex":
-			if err := config.UnregisterClaudeServer("codex", removeScope); err != nil {
-				return err
-			}
-			fmt.Printf("  %s Removed %s from %s configuration %s\n",
-				successStyle.Render("✓"),
-				agentStyle.Render("codex"),
-				agentStyle.Render("Claude Code"),
-				dimStyle.Render("("+removeScope+" scope)"),
-			)
-		case "codex-antigravity":
-			if err := config.UnregisterCodexServer("antigravity"); err != nil {
-				return err
-			}
-			fmt.Printf("  %s Removed %s from %s configuration\n",
-				successStyle.Render("✓"),
-				agentStyle.Render("antigravity"),
-				agentStyle.Render("OpenAI Codex"),
-			)
-		case "antigravity-codex":
-			if err := config.UnregisterAntigravityServer("codex"); err != nil {
-				return err
-			}
-			fmt.Printf("  %s Removed %s from %s configuration\n",
-				successStyle.Render("✓"),
-				agentStyle.Render("codex"),
-				agentStyle.Render("Google Antigravity"),
-			)
-		default:
-			return fmt.Errorf("unknown bridge: %s", bridge)
+		out := cmd.OutOrStdout()
+		b, ok := config.LookupBridge(args[0])
+		if !ok {
+			return fmt.Errorf("unknown bridge: %s (valid: %s)", args[0], strings.Join(config.BridgeNames(), ", "))
+		}
+		if err := config.RemoveBridge(b.Name, removeScope); err != nil {
+			return err
 		}
 
-		fmt.Println()
-		fmt.Println(dimStyle.Render("💡 Restart your host agent CLI to apply the removal."))
+		scope := ""
+		if b.Host == config.AgentClaude {
+			scope = " " + dimStyle.Render("("+removeScope+" scope)")
+		}
+		fmt.Fprintf(out, "  %s Removed %s from %s configuration%s\n",
+			successStyle.Render("✓"),
+			agentStyle.Render(b.Target),
+			agentStyle.Render(config.AgentDisplayName(b.Host)),
+			scope,
+		)
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, dimStyle.Render("💡 Restart your host agent CLI to apply the removal."))
 		return nil
 	},
 }

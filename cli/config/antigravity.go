@@ -13,6 +13,8 @@ func getAntigravityConfigPath() (string, error) {
 	return filepath.Join(home, ".gemini", "config", "mcp_config.json"), nil
 }
 
+// RegisterAntigravityServerCommand writes a stdio MCP server into Antigravity's
+// config. "--host antigravity" is appended to args.
 func RegisterAntigravityServerCommand(name, command string, args []string) error {
 	cfgPath, err := getAntigravityConfigPath()
 	if err != nil {
@@ -30,6 +32,7 @@ func RegisterAntigravityServerCommand(name, command string, args []string) error
 		data["mcpServers"] = mcpServers
 	}
 
+	args = withHostArg(args, AgentAntigravity)
 	formattedArgs := make([]string, len(args))
 	for i, a := range args {
 		formattedArgs[i] = filepath.ToSlash(a)

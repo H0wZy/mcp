@@ -5,12 +5,11 @@ import (
 	"path/filepath"
 )
 
-// ResolveServerScript locates the entrypoint for a given server name.
-// It checks:
-// 1. Working directory: ./servers/<name>/bin/cli.js
-// 2. Binary location relative: ../servers/<name>/bin/cli.js
-// 3. User's known repository location: ~/projects/mcp/servers/<name>/bin/cli.js
-// 4. Fallback to npx command for zero-repo standalone runners
+// ResolveServerScript locates the entrypoint for a given server name
+// ("claude", "codex", "antigravity"). It checks:
+// 1. Working directory: ./servers/<name>/bin/cli.js (running from a clone)
+// 2. Binary location relative: <exe dir>/../servers/<name>/bin/cli.js
+// 3. Fallback to `npx -y @h0wzy/mcp-server-<name>` for standalone installs
 func ResolveServerScript(name string) (command string, args []string) {
 	// 1. Current working directory
 	cwd, err := os.Getwd()
@@ -32,14 +31,6 @@ func ResolveServerScript(name string) (command string, args []string) {
 		}
 	}
 
-	// 3. Known repository clone in user's home
-	if home, err := os.UserHomeDir(); err == nil {
-		candidate := filepath.Join(home, "projects", "mcp", "servers", name, "bin", "cli.js")
-		if _, err := os.Stat(candidate); err == nil {
-			return "node", []string{filepath.ToSlash(candidate)}
-		}
-	}
-
-	// 4. Worldwide zero-repo fallback via npx
+	// 3. Zero-repo fallback via npx
 	return "npx", []string{"-y", "@h0wzy/mcp-server-" + name}
 }

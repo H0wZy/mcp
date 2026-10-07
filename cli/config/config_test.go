@@ -2,8 +2,10 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -44,9 +46,170 @@ func TestCodexRegisterIntoEmptyConfig(t *testing.T) {
 	}
 
 	got := readFile(t, filepath.Join(home, ".codex", "config.toml"))
-	want := "[mcp_servers.antigravity]\ncommand = \"node\"\nargs = [\"/srv/agy/cli.js\"]\n"
+	want := "[mcp_servers.antigravity]\n" +
+		"command = \"node\"\n" +
+		"args = [\"/srv/agy/cli.js\", \"--host\", \"codex\"]\n" +
+		"env_vars = [\"H0WZY_MCP_RUN_ID\", \"H0WZY_MCP_CHAIN\", \"H0WZY_MCP_DEPTH\", \"H0WZY_MCP_DEADLINE\", \"H0WZY_MCP_STATE_DIR\", \"H0WZY_MCP_MAX_DEPTH\", \"H0WZY_MCP_MAX_CALLS\", \"H0WZY_MCP_ALLOW_REVISIT\", \"H0WZY_MCP_DEADLINE_MINUTES\", \"H0WZY_MCP_CHAIN_LOG\"]\n" +
+		"tool_timeout_sec = 3900\n" +
+		"startup_timeout_sec = 60\n"
 	if got != want {
 		t.Fatalf("config mismatch\n got: %q\nwant: %q", got, want)
+	}
+}
+
+func TestCodexRegisterClaudeBridgeKeepsUserEnvAndOtherServers(t *testing.T) {
+	home := withHome(t)
+	cfg := filepath.Join(home, ".codex", "config.toml")
+	writeFile(t, cfg, strings.Join([]string{
+		`model = "gpt-6-astra"`,
+		``,
+		`[mcp_servers.claude]`,
+		`command = "npx"`,
+		`args = ["-y", "@h0wzy/mcp-server-claude"]`,
+		``,
+		`[mcp_servers.claude.env]`,
+		`CLAUDE_MODEL = "sonnet"`,
+		`H0WZY_MCP_MAX_DEPTH = "3"`,
+		``,
+		`[mcp_servers.docs]`,
+		`command = "docs-server"`,
+		`args = ["--port", "1"]`,
+		``,
+	}, "\n"))
+
+	for i := 0; i < 2; i++ { // re-register must be stable
+		if err := RegisterCodexServerCommand("claude", "npx", []string{"-y", "@h0wzy/mcp-server-claude"}); err != nil {
+			t.Fatalf("register #%d: %v", i, err)
+		}
+	}
+
+	got := readFile(t, cfg)
+	for _, want := range []string{
+		`model = "gpt-6-astra"`,
+		"[mcp_servers.claude]\ncommand = \"npx\"\nargs = [\"-y\", \"@h0wzy/mcp-server-claude\", \"--host\", \"codex\"]\nenv_vars = [",
+		"tool_timeout_sec = 3900\nstartup_timeout_sec = 60\n",
+		"[mcp_servers.claude.env]\nCLAUDE_MODEL = \"sonnet\"\nH0WZY_MCP_MAX_DEPTH = \"3\"",
+		"[mcp_servers.docs]\ncommand = \"docs-server\"\nargs = [\"--port\", \"1\"]",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected config to contain %q, got:\n%s", want, got)
+		}
+	}
+	for _, once := range []string{"[mcp_servers.claude]", "env_vars", "--host", "tool_timeout_sec", "[mcp_servers.claude.env]"} {
+		if n := strings.Count(got, once); n != 1 {
+			t.Errorf("expected %q once, found %d times:\n%s", once, n, got)
+		}
+	}
+	for _, v := range CodexChainEnvVars {
+		if !strings.Contains(got, `"`+v+`"`) {
+			t.Errorf("env_vars is missing %s:\n%s", v, got)
+		}
+	}
+	if info, err := os.Stat(cfg); err == nil && runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
+		t.Errorf("config mode = %v, want 0600", info.Mode().Perm())
+	}
+}
+
+func TestRegisterReplacesStaleHostArg(t *testing.T) {
+	home := withHome(t)
+	if err := RegisterAntigravityServerCommand("claude", "node", []string{"/srv/claude/cli.js", "--host", "old", "--host=older"}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(readFile(t, filepath.Join(home, ".gemini", "config", "mcp_config.json"))), &data); err != nil {
+		t.Fatal(err)
+	}
+	args := data["mcpServers"].(map[string]interface{})["claude"].(map[string]interface{})["args"].([]interface{})
+	if got := fmt.Sprint(args); got != "[/srv/claude/cli.js --host antigravity]" {
+		t.Fatalf("args = %s", got)
+	}
+}
+
+func TestJSONHostsGetHostArg(t *testing.T) {
+	home := withHome(t)
+	project := t.TempDir()
+	t.Chdir(project)
+
+	if err := RegisterClaudeServerCommand("codex", "npx", []string{"-y", "@h0wzy/mcp-server-codex"}, "user"); err != nil {
+		t.Fatal(err)
+	}
+	if err := RegisterClaudeServerCommand("antigravity", "node", []string{"/srv/servers/antigravity/bin/cli.js"}, "project"); err != nil {
+		t.Fatal(err)
+	}
+	if err := RegisterAntigravityServerCommand("claude", "node", []string{`C:\repo\servers\claude\bin\cli.js`}); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		path, key, want string
+	}{
+		{filepath.Join(home, ".claude.json"), "codex", "[-y @h0wzy/mcp-server-codex --host claude]"},
+		{filepath.Join(project, ".mcp.json"), "antigravity", "[/srv/servers/antigravity/bin/cli.js --host claude]"},
+		{filepath.Join(home, ".gemini", "config", "mcp_config.json"), "claude", "[" + filepath.ToSlash(`C:\repo\servers\claude\bin\cli.js`) + " --host antigravity]"},
+	}
+	for _, c := range cases {
+		var data map[string]interface{}
+		if err := json.Unmarshal([]byte(readFile(t, c.path)), &data); err != nil {
+			t.Fatalf("%s: %v", c.path, err)
+		}
+		entry := data["mcpServers"].(map[string]interface{})[c.key].(map[string]interface{})
+		if got := fmt.Sprint(entry["args"]); got != c.want {
+			t.Errorf("%s %s args = %s, want %s", c.path, c.key, got, c.want)
+		}
+	}
+}
+
+func TestInstallBridgeWritesEachDirectionIntoItsHost(t *testing.T) {
+	home := withHome(t)
+	t.Chdir(t.TempDir()) // no ./servers here: the npx launch is used
+
+	for _, b := range Bridges {
+		if err := InstallBridge(b.Name, "user"); err != nil {
+			t.Fatalf("install %s: %v", b.Name, err)
+		}
+	}
+	codex := readFile(t, filepath.Join(home, ".codex", "config.toml"))
+	for _, want := range []string{
+		"[mcp_servers.claude]\ncommand = \"npx\"\nargs = [\"-y\", \"@h0wzy/mcp-server-claude\", \"--host\", \"codex\"]",
+		"[mcp_servers.antigravity]\ncommand = \"npx\"\nargs = [\"-y\", \"@h0wzy/mcp-server-antigravity\", \"--host\", \"codex\"]",
+	} {
+		if !strings.Contains(codex, want) {
+			t.Errorf("codex config lacks %q:\n%s", want, codex)
+		}
+	}
+	agy := readFile(t, filepath.Join(home, ".gemini", "config", "mcp_config.json"))
+	if !strings.Contains(agy, `"@h0wzy/mcp-server-claude"`) || !strings.Contains(agy, `"@h0wzy/mcp-server-codex"`) {
+		t.Errorf("antigravity config lacks a bridge:\n%s", agy)
+	}
+
+	for _, b := range Bridges {
+		if err := RemoveBridge(b.Name, "user"); err != nil {
+			t.Fatalf("remove %s: %v", b.Name, err)
+		}
+	}
+	edges, err := InstalledBridges()
+	if err != nil || len(edges) != 0 {
+		t.Fatalf("after removing every bridge: edges=%v err=%v", edges, err)
+	}
+	if err := InstallBridge("codex-team", "user"); err == nil {
+		t.Fatal("expected an error for an unknown bridge")
+	}
+}
+
+func TestResolveServerScript(t *testing.T) {
+	withHome(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	if cmd, args := ResolveServerScript("claude"); cmd != "npx" || fmt.Sprint(args) != "[-y @h0wzy/mcp-server-claude]" {
+		t.Fatalf("without a clone: %s %v", cmd, args)
+	}
+
+	script := filepath.Join(dir, "servers", "claude", "bin", "cli.js")
+	writeFile(t, script, "// stub\n")
+	cmd, args := ResolveServerScript("claude")
+	if cmd != "node" || len(args) != 1 || !strings.HasSuffix(args[0], "/servers/claude/bin/cli.js") || strings.Contains(args[0], `\`) {
+		t.Fatalf("with a clone: %s %v", cmd, args)
 	}
 }
 
@@ -75,7 +238,7 @@ func TestCodexRegisterReplacesOnlyItsOwnSection(t *testing.T) {
 	got := readFile(t, cfg)
 	for _, want := range []string{
 		`model = "gpt-6-astra"`,
-		"[mcp_servers.antigravity]\ncommand = \"node\"\nargs = [\"new.js\"]",
+		"[mcp_servers.antigravity]\ncommand = \"node\"\nargs = [\"new.js\", \"--host\", \"codex\"]",
 		"[mcp_servers.antigravity.env]\nAGY_MODEL = \"gemini-3.8-flash\"",
 		"[mcp_servers.other]\ncommand = \"keep-me\"",
 	} {
