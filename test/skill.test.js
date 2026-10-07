@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const skill = readFileSync(fileURLToPath(new URL('../cli/skills/agent-team/SKILL.md', import.meta.url)), 'utf8');
+// Normalize line endings: a Windows checkout may turn LF into CRLF.
+const skill = readFileSync(fileURLToPath(new URL('../cli/skills/agent-team/SKILL.md', import.meta.url)), 'utf8').replace(/\r\n/g, '\n');
 const { TEAM_TOOLS } = await import('../servers/team/src/index.js');
 
 test('frontmatter has the name and description every harness requires', () => {

@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
 const MAX_LEVELS = 32;
-const QUERY_TIMEOUT_MS = 8000;
+// PowerShell + CIM can take several seconds on a busy Windows machine (seen in CI).
+const QUERY_TIMEOUT_MS = process.platform === 'win32' ? 30000 : 8000;
 
 function linuxParent(pid) {
   try {

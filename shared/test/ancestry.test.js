@@ -6,7 +6,7 @@ import { readAncestors, currentAncestors } from '../ancestry.js';
 
 const moduleUrl = pathToFileURL(fileURLToPath(new URL('../ancestry.js', import.meta.url))).href;
 
-test('the current process lists its parent first', () => {
+test('the current process lists its parent first', { timeout: 60000 }, () => {
   const ancestors = readAncestors();
   assert.ok(Array.isArray(ancestors), 'ancestry should be readable on CI platforms');
   assert.equal(ancestors[0], process.ppid);

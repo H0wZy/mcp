@@ -6,3 +6,6 @@ specs/** linguist-documentation
 # Exclude SpecKit PowerShell generator helper scripts from language detection
 .specify/** linguist-vendored
 *.ps1 linguist-vendored
+
+# The agent-team skill is embedded in hmcp and copied byte-for-byte; keep it LF everywhere.
+cli/skills/**/*.md text eol=lf
