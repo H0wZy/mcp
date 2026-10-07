@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-06
 
-**Status**: Draft
+**Status**: Clarified (2026-10-07)
 
 **Input**: User description: "Create a spec so Antigravity and Codex can also use Claude Code — not only Claude Code calling them — so the three top agents on the market can talk to each other in any direction. Be very careful that this does not turn into an infinite loop that burns a huge amount of tokens."
 
@@ -20,6 +20,20 @@ This feature has two parts:
 
 1. **A loop guard** that every bridge applies on every call.
 2. **A Claude Code bridge**, so Codex and Antigravity can consult and delegate to Claude Code with the same tools and controls Claude Code already has toward them.
+
+---
+
+## Clarifications
+
+### Session 2026-10-07
+
+The maintainer was away and asked for the work to continue without questions. Each answer below is the recommended option, chosen by the agent. Review them before release.
+
+- Q: Where does the developer set the loop-guard limits, and which value wins when two hosts disagree? → A: Environment variables on the bridge server (`H0WZY_MCP_MAX_DEPTH`, `H0WZY_MCP_MAX_CALLS`, `H0WZY_MCP_ALLOW_REVISIT`, `H0WZY_MCP_DEADLINE_MINUTES`), set in the host's MCP config or the shell. The chain's limits are fixed when the chain starts. A nested bridge applies the stricter of the chain's limits and its own.
+- Q: What may `delegate_claude` do without asking, given that nobody can answer a permission prompt? → A: By default it auto-approves file edits inside `cwd` (and the extra folders) and denies everything else that would prompt, including shell commands the user hasn't allowed in their Claude Code settings. The developer can opt into Claude Code's `auto` permission mode with `CLAUDE_DELEGATE_PERMISSION_MODE=auto`.
+- Q: Which Claude models do the light / balanced / deep tiers use? → A: light = `sonnet` at `low`, balanced = `opus` at `medium` (also the startup default), deep = `fable` at `high`. These are Claude Code's model aliases, so new model releases need no code change.
+- Q: How does a bridge detect nesting when the host strips the chain variables (FR-003)? → A: A per-user registry of running bridge-started agents (`~/.h0wzy-mcp/agents/<pid>.json`) plus a walk up the bridge's process ancestors. It reads `/proc` on Linux, `ps` on macOS, and a PowerShell process query on Windows, cached once per server. If agents are registered and the ancestry can't be read, the call fails closed and is treated as being at the maximum depth.
+- Q: Where is the optional chain log, and how is it turned on (FR-024)? → A: It is a JSON Lines file at `~/.h0wzy-mcp/chain.log`, turned on with `H0WZY_MCP_CHAIN_LOG=1`. Each line holds run id, caller, agent, depth, outcome and duration, and never any prompt text.
 
 ---
 
@@ -195,7 +209,7 @@ Every bridge response ends with a short trace line, for example `[chain claude�
 
 - **Default limits**: max depth 2 (hard cap 4), no revisits, chain budget 8 calls (hard cap 32), and a default chain deadline of 60 minutes. A depth of 2 covers "A asks B, and B asks C for a quick check". That is the deepest useful chain for second opinions and reviews. Anything deeper is almost always waste.
 - **Where limits are set**: As with spec 005's ceilings, the developer sets limits outside the conversation (environment / host configuration). An agent can't raise its own limits through a tool call.
-- **Claude Code tiers** (to be confirmed in planning): light = fastest model at low effort; balanced = mid model at medium effort; deep = strongest generally available model at high effort. The bridge uses Claude Code's model aliases so it doesn't break on every model release.
+- **Claude Code tiers** (see Clarifications): light = `sonnet` at `low`; balanced = `opus` at `medium`; deep = `fable` at `high`. The bridge uses Claude Code's model aliases so it doesn't break on every model release.
 - **Read-only means read-only**: Read-only tools on all three bridges should get the same guarantee as `*_claude` (FR-014). Codex and Antigravity read-only tools currently run with automatic approvals (see the review findings). Aligning them is a related fix, best done during this feature's planning.
 - **Process ownership**: Each bridge stays a separate server process per agent, as today. The loop guard lives in the shared core so all three bridges behave the same.
 - **Release target**: **v1.0.6**, shipped together with spec 005 (model / effort control, merged in `572cf12`, not yet released) and spec 007. The latest published release is v1.0.5 (`5cacc64`). Every versioned artifact must read 1.0.6 at release time (see `AGENTS.md` → Versioning).

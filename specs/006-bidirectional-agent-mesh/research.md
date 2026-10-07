@@ -113,3 +113,56 @@ Verified against `agy --help` on the maintainer's machine (Windows, 2026-10-07) 
 | US4 Installer / doctor (Go) | **M**, ~2–3 days | Atomic config writes, TOML keys, cycle report. |
 | US5 Trace / log | **S**, ~1 day | |
 | **Total** | **~2–3 weeks part-time** | US1 + US2 alone are a shippable MVP (~1–1.5 weeks). |
+
+---
+
+## 6. Decisions for the plan (2026-10-07)
+
+### D1. Chain identity and depth
+
+- **Decision**: The depth is the depth of the agent that hosts the bridge. A top-level host is at depth 0, and the agent a bridge starts is at depth + 1. A call is refused when that target depth would exceed the max depth. The chain is the ordered list of agents, host first (`claude>codex`). The host's name comes from the inherited chain. Without one, it comes from `--host <name>` in the bridge's launch args (written by `hmcp install`) or `H0WZY_MCP_HOST`. Failing both, it is `host`.
+- **Rationale**: "max depth 2" then reads naturally: A (0) → B (1) → C (2) runs, and C cannot call anyone. The host name in launch args survives hosts that filter env vars, and it avoids TOML `env` sub-table conflicts in Codex configs.
+- **Alternatives**: Counting depth as the number of hops already made gives the same result but is harder to explain in refusals. A host name in env only fails under Codex's allow-list.
+
+### D2. Budget counter
+
+- **Decision**: Each call claims a slot `runs/<runId>/calls/<n>` for n = 1…maxCalls with `open(..., 'wx')`. Getting no slot means a refusal. The limits are written once to `runs/<runId>/policy.json` when the chain starts. A nested bridge applies the stricter of that policy and its own env.
+- **Rationale**: This is atomic across processes and platforms, with no locks and no daemon. The chain policy is fixed, so a nested host can't raise its own limits (spec: "An agent can't raise its own limits").
+- **Alternatives**: A lock file plus a counter needs stale-lock recovery. A counter in env can't be shared between parallel siblings.
+
+### D3. Nesting fallback (FR-003)
+
+- **Decision**: Before spawning, a bridge writes `agents/<childPid>.json` (run id, chain incl. target, depth, deadline) and removes it when the child exits. A bridge whose env has no chain looks at that registry. If live entries exist, it walks its own process ancestors (up to 32 levels). A match means it inherits that entry's chain. No match means it is top-level. Ancestry that can't be read while entries exist means fail closed, refused as `nesting-unknown`. Stale entries (dead pid, or 10 min past the deadline) are ignored and swept.
+- **Rationale**: This tells a nested call apart from a fresh session the developer starts in another terminal while a chain runs (spec edge case).
+- **Alternatives**: "Any live entry means nested" would wrongly cap fresh sessions. Ancestry alone (no registry) can't know which ancestor was a bridge child.
+
+### D4. L1 per target CLI
+
+| Target | Flags at max depth | Source |
+|---|---|---|
+| Claude Code | `--strict-mcp-config` (no `--mcp-config` → no MCP servers) and `--disable-slash-commands` | `claude --help` 2.1.292 |
+| Codex | `-c mcp_servers.<name>.enabled=false` for each bridge server found in `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`). Only existing names are disabled, because a new `mcp_servers.<x>` table without a `command` could break the config. | config-advanced docs |
+| Antigravity | `--disable-slash-commands`. No per-call MCP switch exists, so L2 covers it. | `agy --help` |
+
+A bridge server is recognized by its launch args: `@h0wzy/mcp-server-<x>` or `servers/<x>/bin/cli.js`.
+
+### D5. Claude Code command lines (verified against `claude --help` 2.1.292)
+
+- **Every call**: `claude -p --output-format json --model <m> [--effort <e>] --permission-prompts none`. The prompt goes on stdin. The model is a curated alias (`fable`, `opus`, `sonnet`, `haiku`) or a full model id. `--effort` is skipped for models without effort control (Haiku 4.5).
+- **Read-only** (`ask|review|brainstorm|plan_claude`): `--tools Read,Grep,Glob --no-session-persistence`, plus `--add-dir <dir>` for each context folder. No edit or shell tool exists in the session at all. Anything that would prompt is denied.
+- **Delegate**: `--permission-mode acceptEdits` (or `CLAUDE_DELEGATE_PERMISSION_MODE` ∈ `acceptEdits|auto|dontAsk`), run with `cwd`, plus `--add-dir` for extra folders. Edits are auto-approved and everything else that would prompt is denied, so it never hangs (FR-015).
+- **Caps**: `CLAUDE_MAX_TURNS` → `--max-turns`, `CLAUDE_MAX_BUDGET_USD` → `--max-budget-usd` (FR-017).
+- **Output**: a JSON object with `result`, `is_error`, `subtype`, `total_cost_usd`, `num_turns` and `session_id`. The bridge returns `result` and adds `cost=$…` and `turns=…` to the footer. An `error_max_*` subtype is reported as a reached cap. If parsing fails, the raw text is returned.
+- **Alternatives**: `--permission-mode plan` was rejected for read-only. In print mode the plan ends in an `ExitPlanMode` call that nobody approves, and it doesn't remove `Bash`. `--restricted` is stronger, but it ignores the user's settings files, which may hold auth or model settings people rely on.
+
+### D6. Claude tiers and catalog
+
+- **Decision**:
+  - Tiers: light = `sonnet`/`low`, balanced = `opus`/`medium` (startup default), deep = `fable`/`high`.
+  - Catalog: the aliases `fable` (deep), `opus` (balanced), `sonnet` (light) and `haiku` (light, no effort flag), plus the current full ids `claude-fable-5-1`, `claude-opus-5-5`, `claude-sonnet-5-5` and `claude-haiku-4-5`.
+  - Env prefix `CLAUDE_` (`CLAUDE_MODEL`, `CLAUDE_EFFORT`, `CLAUDE_MAX_TIER`, `CLAUDE_MAX_EFFORT`, `CLAUDE_TIER_*`).
+- **Rationale**: Aliases follow model releases automatically. Haiku 4.5 rejects the effort parameter, so `--effort` is not sent for it.
+
+### D7. Timeouts
+
+- **Decision**: A hop's process timeout is min(the tool's own limit, time left until the chain deadline). Antigravity's `--print-timeout` gets the same cap, rounded down to whole minutes (min 1). `hmcp install` writes Codex `tool_timeout_sec = 3900` and `startup_timeout_sec = 60`.
