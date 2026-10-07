@@ -1,10 +1,10 @@
 // Asserts the exact command lines the servers hand to the agent CLIs, using fake
 // binaries. This is what actually reaches `codex` and `agy`, so it is the contract
 // that matters most for model / effort control and sandboxing.
-import './helpers/guard-env.js';
+import { codexHome, claudeConfigDir } from './helpers/guard-env.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, realpathSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createFakeAgent } from './helpers/fake-agent.js';
@@ -154,12 +154,45 @@ test('ask_antigravity passes the catalog variant id and does not auto-approve an
   const result = await withLog(agyFake, () => callTool(agy, 'ask_antigravity', { prompt: 'say hi' }));
   assert.equal(result.isError, false, result.content[0].text);
   const { argv } = lastCall(agyFake);
-  assert.equal(argv.length, 6, argv.join(' '));
+  assert.equal(argv.length, 8, argv.join(' '));
   assert.equal(argv[0], '-p');
   assert.match(argv[1], /^\[H0wZy\/mcp chain\] You are antigravity/);
   assert.match(argv[1], /\n\nRead-only request: do not create, edit or delete files/);
   assert.ok(argv[1].endsWith('\n\nsay hi'), argv[1]);
-  assert.deepEqual(argv.slice(2), ['--model', 'gemini-3.8-flash-high', '--print-timeout', '5m']);
+  assert.deepEqual(argv.slice(2, 6), ['--model', 'gemini-3.8-flash-high', '--print-timeout', '5m']);
+  // A private log, removed after the call, explains a run that never started.
+  assert.equal(argv[6], '--log-file');
+  assert.match(argv[7], /h0wzy-agy-[^\\/]+[\\/]agy\.log$/);
+  assert.equal(existsSync(argv[7]), false, 'the agy log is removed after the call');
+});
+
+test('an agy run stopped by its own --print-timeout is an error that names the MCP servers it waited for', async () => {
+  const result = await withEnv(
+    {
+      FAKE_AGENT_STDOUT: ' ',
+      FAKE_AGENT_STDERR: '[agy] print timeout after 5m0s with turn in progress; returning partial output',
+      FAKE_AGENT_LOG_TEXT: [
+        'I1007 17:29:02.794594 15 mcp_manager.go:875] MCP: 2 server(s) still connecting after 30s: google-flow-remote, slowpoke',
+        'I1007 17:29:32.794594 15 mcp_manager.go:875] MCP: 1 server(s) still connecting after 1m0s: google-flow-remote',
+      ].join('\n'),
+    },
+    () => withLog(agyFake, () => callTool(agy, 'ask_antigravity', { prompt: 'say hi' }))
+  );
+  assert.equal(result.isError, true, result.content[0].text);
+  const text = result.content[0].text;
+  assert.match(text, /^⏱️ Antigravity did not finish within 5 min and returned no answer\.\n/);
+  // The last "still connecting" line is the current state.
+  assert.match(text, /still waiting for MCP server\(s\) to connect: google-flow-remote\. /);
+  assert.match(text, /`agy mcp remove google-flow-remote`/);
+  assert.match(text, /\[antigravity · model=/);
+
+  // A partial answer is kept and labeled.
+  const partial = await withEnv(
+    { FAKE_AGENT_STDOUT: 'half an answer', FAKE_AGENT_STDERR: '[agy] print timeout after 5m0s with turn in progress; returning partial output' },
+    () => withLog(agyFake, () => callTool(agy, 'ask_antigravity', { prompt: 'say hi' }))
+  );
+  assert.equal(partial.isError, true);
+  assert.match(partial.content[0].text, /^half an answer\n\n⏱️ Antigravity did not finish within 5 min; the answer above is partial\.\n\n\[antigravity/);
 });
 
 test('read-only antigravity tools add context folders for reading and surface soft-denied actions', async () => {
@@ -248,6 +281,8 @@ test('ask_claude runs read-only with only Read/Grep/Glob, no session, prompt on 
     '--permission-prompts', 'none',
     '--tools', 'Read,Grep,Glob',
     '--no-session-persistence',
+    // FR-026: none of the user's MCP servers (no mesh bridge is registered here).
+    '--strict-mcp-config',
   ]);
   assert.match(input, /^\[H0wZy\/mcp chain\] You are claude, called by host/);
   assert.ok(input.endsWith('\n\nexplain the guard'), input);
@@ -292,6 +327,7 @@ test('delegate_claude edits inside cwd with acceptEdits and denied prompts', asy
       '--permission-prompts', 'none',
       '--permission-mode', 'acceptEdits',
       '--add-dir', extra,
+      '--strict-mcp-config',
     ]);
     assert.ok(samePath(cwd, work), `${cwd} vs ${work}`);
 
@@ -340,4 +376,123 @@ test('at the maximum depth every target starts without bridge tools (L1)', async
     assert.match(refused.content[0].text, /Loop guard: cycle/);
     assert.equal(codexFake.calls().length, before, 'a refused call must not start the agent');
   });
+});
+
+// ---------------------------------------------------------------------------
+// FR-026: the MCP servers a nested agent loads
+// ---------------------------------------------------------------------------
+
+const CODEX_CONFIG = `model = "gpt-6-astra"
+
+[mcp_servers.antigravity]
+command = "npx"
+args = ["-y", "@h0wzy/mcp-server-antigravity", "--host", "codex"]
+
+[mcp_servers.claude]
+command = "node"
+args = ["C:/Users/me/mcp/servers/claude/bin/cli.js", "--host", "codex"]
+
+[mcp_servers.team]
+command = "npx"
+args = ["-y", "@h0wzy/mcp-server-team", "--host", "codex"]
+
+[mcp_servers.blender]
+command = "uvx"
+args = ["mcp-for-blender"]
+
+[mcp_servers.blender.env]
+BLENDER_PORT = "9877"
+`;
+
+const USER_CODEX = { type: 'stdio', command: 'node', args: ['C:/repo/servers/codex/bin/cli.js', '--host', 'claude'] };
+const LOCAL_CODEX = { type: 'stdio', command: 'node', args: ['D:/other/servers/codex/bin/cli.js'] };
+const USER_AGY = { type: 'stdio', command: 'npx', args: ['-y', '@h0wzy/mcp-server-antigravity'], env: { AGY_MODEL: 'gemini-3.8-flash' } };
+
+async function withAgentConfigs(fn) {
+  const codexToml = join(codexHome, 'config.toml');
+  const claudeJson = join(claudeConfigDir, '.claude.json');
+  writeFileSync(codexToml, CODEX_CONFIG);
+  writeFileSync(
+    claudeJson,
+    JSON.stringify({
+      mcpServers: {
+        codex: USER_CODEX,
+        antigravity: USER_AGY,
+        team: { type: 'stdio', command: 'npx', args: ['-y', '@h0wzy/mcp-server-team'] },
+        blender: { type: 'stdio', command: 'uvx', args: ['mcp-for-blender'] },
+        remote: { type: 'http', url: 'https://example.com/mcp' },
+      },
+      projects: {
+        [work.replace(/\\/g, '/')]: { mcpServers: { codex: LOCAL_CODEX, postgres: { command: 'npx', args: ['pg'] } } },
+      },
+    })
+  );
+  try {
+    return await fn();
+  } finally {
+    rmSync(codexToml, { force: true });
+    rmSync(claudeJson, { force: true });
+  }
+}
+
+const offFlags = (argv) => argv.filter((a) => /^mcp_servers\..+\.enabled=false$/.test(a));
+
+test('a nested Codex starts the mesh bridges but none of the user\'s other MCP servers', async () => {
+  await withAgentConfigs(async () => {
+    await withLog(codexFake, () => callTool(codex, 'ask_codex', { prompt: 'x' }));
+    assert.deepEqual(offFlags(lastCall(codexFake).argv), ['mcp_servers.team.enabled=false', 'mcp_servers.blender.enabled=false']);
+
+    await withLog(codexFake, () => callTool(codex, 'delegate_codex', { prompt: 'x', cwd: work }));
+    assert.deepEqual(offFlags(lastCall(codexFake).argv), ['mcp_servers.team.enabled=false', 'mcp_servers.blender.enabled=false']);
+  });
+});
+
+test('a nested Claude Code gets only the mesh bridges through a temporary --mcp-config', async () => {
+  await withAgentConfigs(async () => {
+    await withLog(claudeFake, () => callTool(claude, 'ask_claude', { prompt: 'x' }));
+    let call = lastCall(claudeFake);
+    const at = call.argv.indexOf('--mcp-config');
+    assert.deepEqual(call.argv.slice(at - 1, at + 1), ['--strict-mcp-config', '--mcp-config']);
+    assert.deepEqual(call.mcpConfig, { mcpServers: { codex: USER_CODEX, antigravity: USER_AGY } });
+    assert.equal(existsSync(call.argv[at + 1]), false, 'the --mcp-config file is removed after the call');
+
+    // Local scope (the project's entry in ~/.claude.json) wins for its own folder.
+    await withLog(claudeFake, () => callTool(claude, 'delegate_claude', { prompt: 'x', cwd: work }));
+    call = lastCall(claudeFake);
+    assert.deepEqual(call.mcpConfig, { mcpServers: { codex: LOCAL_CODEX, antigravity: USER_AGY } });
+  });
+});
+
+test('H0WZY_MCP_USER_SERVERS=1 lets nested agents load the user\'s own MCP servers', async () => {
+  await withAgentConfigs(() =>
+    withEnv({ H0WZY_MCP_USER_SERVERS: '1' }, async () => {
+      await withLog(codexFake, () => callTool(codex, 'ask_codex', { prompt: 'x' }));
+      assert.deepEqual(offFlags(lastCall(codexFake).argv), ['mcp_servers.team.enabled=false']);
+
+      await withLog(claudeFake, () => callTool(claude, 'ask_claude', { prompt: 'x' }));
+      const { argv } = lastCall(claudeFake);
+      assert.equal(argv.includes('--strict-mcp-config'), false, argv.join(' '));
+      assert.equal(argv.includes('--mcp-config'), false, argv.join(' '));
+    })
+  );
+});
+
+test('at the maximum depth a nested Codex starts with every MCP server off, bridges included', async () => {
+  const chainEnv = {
+    H0WZY_MCP_RUN_ID: 'abcdef13',
+    H0WZY_MCP_CHAIN: 'tester>claude',
+    H0WZY_MCP_DEPTH: '1',
+    H0WZY_MCP_DEADLINE: String(Date.now() + 600000),
+  };
+  await withAgentConfigs(() =>
+    withEnv(chainEnv, async () => {
+      await withLog(codexFake, () => callTool(codex, 'ask_codex', { prompt: 'deep' }));
+      assert.deepEqual(offFlags(lastCall(codexFake).argv), [
+        'mcp_servers.antigravity.enabled=false',
+        'mcp_servers.claude.enabled=false',
+        'mcp_servers.team.enabled=false',
+        'mcp_servers.blender.enabled=false',
+      ]);
+    })
+  );
 });

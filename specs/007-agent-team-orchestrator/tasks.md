@@ -59,6 +59,7 @@ description: "Tasks for 007 Multi-Vendor Agent Team Orchestrator"
 
 - [x] T019 Docs: README (team section, skill triggers, limits), `servers/team/README.md`, AGENTS.md layout and roadmap.
 - [ ] T020 Run `npm test` and `go test ./cli/...`, then trigger CI on all 3 OSes.
+- [x] T021 Real-CLI follow-up (research D9, spec 006 FR-026): teammate Claude Code and Codex turns load only the mesh bridges; Antigravity turns get a private `--log-file`, a print timeout counts as a failed turn that names the MCP servers agy waited for, and the process limit is `--print-timeout` + 60 s; Claude error results report `errors`. Tests in `shared/test/team-adapters.test.js`.
 
 ## Dependencies
 

@@ -17,7 +17,7 @@ const {
   formatResilientResponse,
   createAgentConfig,
   createConfigureTool,
-  noBridgeArgs,
+  claudeMcpArgs,
   parseClaudeResult,
   claudeChildEnv,
   claudeCapArgs,
@@ -122,20 +122,27 @@ async function executeClaude({ prompt, prefix = '', paths, model, effort, cwd, d
   }
   for (const dir of dirs) args.push('--add-dir', dir);
   args.push(...capArgs);
-  // L1: at the maximum depth, start Claude Code without any MCP server or skill.
-  if (hop?.atMaxDepth) args.push(...noBridgeArgs('claude'));
+  // FR-026: only the mesh bridges, not every MCP server the user configured; none at
+  // the maximum depth (L1).
+  const mcp = claudeMcpArgs({ atMaxDepth: hop?.atMaxDepth, cwd: workDir });
+  args.push(...mcp.args);
 
   const minutes = delegate ? timeoutMinutes : READ_ONLY_TIMEOUT_MINUTES;
   const timeoutMs = minutes * 60000;
-  const res = await executeProcess(claudeBin, args, {
-    cwd: workDir,
-    timeoutMs: hop ? hop.capTimeoutMs(timeoutMs) : timeoutMs,
-    signal,
-    toolName: 'claude',
-    input: fullPrompt,
-    env: claudeChildEnv(hop?.childEnv),
-    onSpawn: hop ? (child) => hop.registerAgent(child.pid) : undefined,
-  });
+  let res;
+  try {
+    res = await executeProcess(claudeBin, args, {
+      cwd: workDir,
+      timeoutMs: hop ? hop.capTimeoutMs(timeoutMs) : timeoutMs,
+      signal,
+      toolName: 'claude',
+      input: fullPrompt,
+      env: claudeChildEnv(hop?.childEnv),
+      onSpawn: hop ? (child) => hop.registerAgent(child.pid) : undefined,
+    });
+  } finally {
+    mcp.cleanup();
+  }
 
   const parsed = parseClaudeResult(res.stdout);
   const footerSnapshot = warnings.length ? { ...snapshot, warnings: [...snapshot.warnings, ...warnings] } : snapshot;
@@ -154,7 +161,7 @@ async function executeClaude({ prompt, prefix = '', paths, model, effort, cwd, d
 
   const formattedError = formatResilientResponse({
     provider: 'Claude Code',
-    rawOutput: [res.stderr, parsed.json ? parsed.text : res.stdout].filter(Boolean).join('\n\n'),
+    rawOutput: [res.stderr, parsed.errors.join('\n'), parsed.json ? parsed.text : res.stdout].filter(Boolean).join('\n\n'),
     exitCode: res.exitCode,
   });
   return {

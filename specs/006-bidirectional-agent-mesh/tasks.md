@@ -129,6 +129,17 @@ Format: `[ID] [P?] [Story] Description`. `[P]` means it can run in parallel (dif
 
 ---
 
+## Phase 9: Checked on the real CLIs (FR-026, research §7)
+
+- [x] T029 Add `shared/mcp-scope.js`: `codexMcpArgs` (switch off every non-mesh `[mcp_servers.*]` table, and the bridges at max depth), `claudeMeshServers` / `claudeMcpArgs` (`--strict-mcp-config` + a temporary `--mcp-config` with the mesh bridges from the user and local scope of `~/.claude.json`; never a project `.mcp.json`), `H0WZY_MCP_USER_SERVERS=1` opt-out. `shared/l1.js` gains `bridgeKind` and `listCodexServers`. Tests in `shared/test/mcp-scope.test.js` and `shared/test/l1.test.js`.
+- [x] T030 Use it in `servers/claude`, `servers/codex` and the team adapters (`shared/team/adapters.js`), with cleanup of the temp file on every path. `test/helpers/guard-env.js` points `CODEX_HOME` and `CLAUDE_CONFIG_DIR` at empty temp folders, and the fake agent records the `--mcp-config` content. Argv tests in `test/argv.test.js` and `shared/test/team-adapters.test.js`.
+- [x] T031 Add `shared/agy.js` (print-timeout detection, "still connecting" log parsing, private `--log-file`, the JSON envelope parser moved from the adapters). The Antigravity bridge and team turns report a stuck run as a timed-out error that names the servers; the process limit becomes `--print-timeout` + 60 s. Tests in `shared/test/agy.test.js`, `test/argv.test.js` and `shared/test/team-adapters.test.js`.
+- [x] T032 `parseClaudeResult` reports the JSON `errors`; drop `CLAUDE_CODE_SESSION_ATTENDED` from the nested env.
+- [x] T033 Go: add `H0WZY_MCP_USER_SERVERS` to the Codex `env_vars` allow-list; `hmcp doctor` shows which servers nested agents load and flags an invalid value.
+- [x] T034 Re-run on the real CLIs: `ask_claude`, `ask_codex`, `delegate_claude`, `delegate_codex`, a 2-hop chain `ask_claude → ask_codex`, and `delegate_antigravity` against a stuck MCP server (research §7).
+
+---
+
 ## Dependencies & Execution Order
 
 - T003, T004, T007 → T005 → T006 → all stories.

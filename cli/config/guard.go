@@ -28,11 +28,14 @@ type GuardOverride struct {
 // GuardPolicy is the effective loop-guard limits for bridges started with the
 // given environment.
 type GuardPolicy struct {
-	MaxDepth        int             `json:"maxDepth"`
-	MaxCalls        int             `json:"maxCalls"`
-	AllowRevisit    bool            `json:"allowRevisit"`
-	DeadlineMinutes int             `json:"deadlineMinutes"`
-	Overrides       []GuardOverride `json:"overrides"`
+	MaxDepth        int  `json:"maxDepth"`
+	MaxCalls        int  `json:"maxCalls"`
+	AllowRevisit    bool `json:"allowRevisit"`
+	DeadlineMinutes int  `json:"deadlineMinutes"`
+	// UserServers: nested agents also load the user's own MCP servers, not only
+	// the mesh bridges (spec 006 FR-026, H0WZY_MCP_USER_SERVERS=1).
+	UserServers bool            `json:"userServers"`
+	Overrides   []GuardOverride `json:"overrides"`
 }
 
 // LoadGuardPolicy applies the data-model validation to the H0WZY_MCP_* variables
@@ -65,7 +68,20 @@ func LoadGuardPolicy(getenv func(string) string) GuardPolicy {
 		p.Overrides = append(p.Overrides, GuardOverride{Var: "H0WZY_MCP_ALLOW_REVISIT", Value: raw})
 	}
 	p.DeadlineMinutes = limit("H0WZY_MCP_DEADLINE_MINUTES", GuardDefaultDeadlineMinutes, GuardCapDeadlineMinutes)
+	if raw := strings.TrimSpace(getenv("H0WZY_MCP_USER_SERVERS")); raw != "" {
+		// The bridges accept exactly "1"; anything else keeps the mesh-only default.
+		p.UserServers = raw == "1"
+		p.Overrides = append(p.Overrides, GuardOverride{Var: "H0WZY_MCP_USER_SERVERS", Value: raw, Invalid: raw != "1"})
+	}
 	return p
+}
+
+// NestedServers says which MCP servers an agent started by a bridge loads.
+func (p GuardPolicy) NestedServers() string {
+	if p.UserServers {
+		return "nested Claude Code and Codex load the mesh bridges and your own MCP servers"
+	}
+	return "nested Claude Code and Codex load only the mesh bridges (H0WZY_MCP_USER_SERVERS=1 adds your own MCP servers)"
 }
 
 // Summary renders the limits as "depth 2 · calls 8 · revisits off · deadline 60 min".
@@ -93,6 +109,8 @@ func (p GuardPolicy) Summary() string {
 // Describe explains one override for humans.
 func (o GuardOverride) Describe() string {
 	switch {
+	case o.Invalid && o.Var == "H0WZY_MCP_USER_SERVERS":
+		return fmt.Sprintf("%s=%s is not 1: nested agents load only the mesh bridges", o.Var, o.Value)
 	case o.Invalid:
 		return fmt.Sprintf("%s=%s is not a whole number ≥ 1: the default is used", o.Var, o.Value)
 	case o.Clamped:

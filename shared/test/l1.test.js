@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { findBridgeServers, noBridgeArgs, codexConfigPath } from '../l1.js';
+import { bridgeKind, findBridgeServers, listCodexServers, noBridgeArgs, codexConfigPath } from '../l1.js';
 
 const CONFIG = `
 model = "gpt-6-astra"
@@ -30,6 +30,23 @@ model = "gpt-6-luna"
 test('finds the H0wZy/mcp bridge servers in a Codex config and ignores the rest', () => {
   assert.deepEqual(findBridgeServers(CONFIG), ['antigravity', 'claude']);
   assert.deepEqual(findBridgeServers(''), []);
+});
+
+test('lists every Codex MCP server with the bridge it launches', () => {
+  assert.deepEqual(listCodexServers(CONFIG), [
+    { name: 'antigravity', kind: 'antigravity' },
+    { name: 'claude', kind: 'claude' },
+    { name: 'postgres', kind: null },
+  ]);
+});
+
+test('bridgeKind recognises npm packages and clone paths, with either slash', () => {
+  assert.equal(bridgeKind('npx -y @h0wzy/mcp-server-codex --host claude'), 'codex');
+  assert.equal(bridgeKind('node C:\\\\Users\\\\me\\\\mcp\\\\servers\\\\team\\\\bin\\\\cli.js'), 'team');
+  assert.equal(bridgeKind('node /home/me/mcp/servers/Antigravity/bin/cli.js'), 'antigravity');
+  assert.equal(bridgeKind('npx -y @h0wzy/mcp-server-codexx'), null);
+  assert.equal(bridgeKind('npx -y @h0wzy/mcp'), null);
+  assert.equal(bridgeKind(undefined), null);
 });
 
 test('L1 flags per target', () => {

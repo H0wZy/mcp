@@ -28,7 +28,7 @@ claude -p --output-format json --model <m> [--effort <e>] --permission-prompts n
        --tools Read,Grep,Glob --no-session-persistence
        [--add-dir <dir>]...                 # one per context folder (file → its folder)
        [--max-turns <n>] [--max-budget-usd <x>]
-       [--strict-mcp-config --disable-slash-commands]   # only at max depth (L1)
+       <MCP scope>
 ```
 
 `delegate_claude` (spawn cwd = validated `cwd`):
@@ -38,8 +38,19 @@ claude -p --output-format json --model <m> [--effort <e>] --permission-prompts n
        --permission-mode <acceptEdits|auto|dontAsk>
        [--add-dir <dir>]...                 # extra folders from `paths`
        [--max-turns <n>] [--max-budget-usd <x>]
-       [--strict-mcp-config --disable-slash-commands]
+       <MCP scope>
 ```
+
+`<MCP scope>` (FR-026, `claudeMcpArgs` in `shared/mcp-scope.js`):
+
+| Situation | Flags |
+|---|---|
+| At the maximum depth (L1) | `--strict-mcp-config --disable-slash-commands` |
+| `H0WZY_MCP_USER_SERVERS=1` | none: Claude Code loads the user's MCP servers |
+| Mesh bridges registered in `~/.claude.json` (user scope, or the local scope of the working folder) | `--strict-mcp-config --mcp-config <temp file>` |
+| No mesh bridge registered | `--strict-mcp-config` |
+
+The temp file (`<tmpdir>/h0wzy-mcp-*/mcp.json`, mode 0600) holds `{ "mcpServers": { <name>: <entry as registered> } }` for the `codex`, `antigravity` and `claude` bridges only, and is removed when the call ends. A project's `.mcp.json` is never read. `$CLAUDE_CONFIG_DIR/.claude.json` replaces `~/.claude.json` when that variable is set.
 
 Timeouts:
 - Read-only tools: min(10 min, time left in the chain).
@@ -59,11 +70,12 @@ Timeouts:
 | `CLAUDE_BRIDGE_MAX_TURNS` | Adds `--max-turns` to every call |
 | `CLAUDE_BRIDGE_MAX_BUDGET_USD` | Adds `--max-budget-usd` to every call |
 | `CLAUDE_BRIDGE_DELEGATE_PERMISSION_MODE` | `acceptEdits` (default), `auto` or `dontAsk`. Any other value is ignored, with a warning |
+| `H0WZY_MCP_USER_SERVERS` | `1` lets the nested Claude Code load the user's own MCP servers (FR-026) |
 
-The child's environment drops the session variables a Claude Code ancestor exports (`CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_MESSAGING_*`, `CLAUDE_EFFORT`, `CLAUDE_PID`). A nested `claude -p` must not attach to the outer session, and `CLAUDE_EFFORT` must not compete with `--effort`.
+The child's environment drops the session variables a Claude Code ancestor exports (`CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_MESSAGING_*`, `CLAUDE_CODE_SESSION_ATTENDED`, `CLAUDE_EFFORT`, `CLAUDE_PID`). A nested `claude -p` must not attach to the outer session, and `CLAUDE_EFFORT` must not compete with `--effort`.
 
 ## Reply
 
 - **Success**: the JSON `result`, then the execution footer `[claude · model=<m> · effort=<e|n/a> · source=<s> · cost=$<x> · turns=<n>]` (cost and turns only when reported), then the chain trace line.
-- **`is_error` true or a non-zero exit**: `formatResilientResponse` (auth / rate limit / generic). An `error_max_turns` or `error_max_budget_usd` subtype adds `Stopped: the <turn|budget> cap set by CLAUDE_BRIDGE_MAX_* was reached.`
+- **`is_error` true or a non-zero exit**: `formatResilientResponse` (auth / rate limit / generic) over stderr, the JSON `errors` (an error result has no `result`; e.g. `Reached maximum budget ($0.05)`) and any text. An `error_max_turns` or `error_max_budget_usd` subtype adds `Stopped: the <turn|budget> cap set by CLAUDE_BRIDGE_MAX_* was reached.`
 - **Binary missing**: install guidance (`npm install -g @anthropic-ai/claude-code` or the native installer, or set `CLAUDE_CLI_PATH`).

@@ -234,6 +234,20 @@ With bridges in every direction, Codex can ask Antigravity, which asks Claude, w
 - `H0WZY_MCP_CHAIN_LOG=1` keeps a JSON Lines log at `~/.h0wzy-mcp/chain.log` (run id, agents, depth, outcome, duration; never prompt text).
 - `hmcp doctor` lists every installed direction, the cycles they form, and the active limits.
 
+### What an agent started by a bridge loads
+
+A nested agent gets the mesh bridges (`codex`, `antigravity`, `claude`) and **none of your other MCP servers**. Measured on a real setup (11 MCP servers plus the claude.ai connectors in Claude Code, 11 servers in Codex):
+
+| Call | All your MCP servers | Mesh only |
+| :--- | :--- | :--- |
+| `ask_claude` (Haiku, one-line answer) | ~380k tokens of tool definitions, US$ 0.38 | US$ 0.004 |
+| `ask_codex` (one-line answer) | 37 s | 13 s |
+
+- **Claude Code** runs with `--strict-mcp-config` plus a temporary `--mcp-config` that lists only the bridges registered in your user config (`~/.claude.json`, user and local scope). A project's `.mcp.json` is never passed on, because Claude Code asks you before it starts those servers.
+- **Codex** runs with `-c mcp_servers.<name>.enabled=false` for every server that isn't a bridge.
+- **Antigravity** has no per-call switch, so it always loads every server in `~/.gemini/config/mcp_config.json`, and it **waits until all of them have connected** before it starts. If an Antigravity call returns `⏱️ Antigravity did not finish…` and names a server it was waiting for, bring that server back online or remove it (`agy mcp remove <name>`); `agy mcp disable` was not enough in agy 1.3.1.
+- `H0WZY_MCP_USER_SERVERS=1` lets nested Claude Code and Codex load your own servers again. At the maximum depth they still get none.
+
 ---
 
 ## 👥 Agent Teams across vendors (spec 007)
@@ -258,6 +272,7 @@ Then, in your usual interactive session:
 - **Messages**: teammates message each other or the lead by name, and an idle teammate wakes for one turn.
 - **`team_wait`**: returns as soon as something happens, with compact results capped at 8,000 chars. Full outputs are read on demand with `team_result`, which keeps the lead's own token use low.
 - **Hard limits**: 3 teammates, 10 turns each, 30 in total, 60 min (`H0WZY_TEAM_*`). Every turn goes through the loop guard, and teammates can't start teams of their own.
+- **Lean teammates**: like any agent a bridge starts, Claude Code and Codex teammates load only the mesh bridges, not your other MCP servers (see above).
 
 See [`servers/team/README.md`](servers/team/README.md) for every tool and setting.
 

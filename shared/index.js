@@ -8,6 +8,8 @@ export * from './agent-config.js';
 export * from './chain-guard.js';
 export * from './ancestry.js';
 export * from './l1.js';
+export * from './mcp-scope.js';
 export * from './configure-tool.js';
 export * from './claude.js';
+export * from './agy.js';
 export * from './team/index.js';

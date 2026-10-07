@@ -167,11 +167,13 @@ Each adapter builds the argv for one turn and reads the output. It reuses the re
 | Codex | `-c sandbox_mode=read-only -c approval_policy=never --ephemeral` | `-c sandbox_mode=workspace-write --approve-for-me` | A compact history of earlier turns in the prompt | `-o <file>` (last message), plus stdout as a fallback |
 | Antigravity | No auto-approval, read-only notice | `--dangerously-skip-permissions` | `--conversation <id>` from `--output-format json` → `conversation_id` | `--output-format json` → `response`, `usage` |
 
-Every turn runs through `executeProcess` with the hop's `childEnv`, `onSpawn` registration and capped timeout. Every turn passes `--permission-prompts none` to Claude Code. Antigravity's JSON envelope fields come from the official headless docs.
+Every turn runs through `executeProcess` with the hop's `childEnv`, `onSpawn` registration and capped timeout. Every turn passes `--permission-prompts none` to Claude Code. Antigravity's JSON envelope fields come from the official headless docs, and were confirmed on a real run (D9).
+
+Like the bridges, a teammate's Claude Code and Codex load only the mesh bridges, not the user's other MCP servers (spec 006 FR-026): Claude Code gets `--strict-mcp-config` plus a temporary `--mcp-config`, Codex gets `-c mcp_servers.<name>.enabled=false` for every other server. Antigravity turns pass a private `--log-file` (D9).
 
 ### D3. Turn timeout
 
-Each turn gets min(`H0WZY_TEAM_TURN_MINUTES`, default 20, cap 60; time left before the team deadline; time left in the hop's chain).
+Each turn gets min(`H0WZY_TEAM_TURN_MINUTES`, default 20, cap 60; time left before the team deadline; time left in the hop's chain). An Antigravity turn's process limit is that plus 60 s, because agy needs about 25 s around `--print-timeout` to start and to return its partial output (spec 006 research §7).
 
 ### D4. Wake rules
 
@@ -205,3 +207,11 @@ With `can_edit: true` and a git repository:
 `task_create` can take `check: ["npm", "test"]` (an argv array, never a shell string). It runs in the member's work folder with a 10-minute limit when the teammate reports `done`.
 - **Pass**: the task completes.
 - **Fail**: the task stays in progress, the output tail (≤ 4,000 chars) goes to the teammate's mailbox, and it wakes for another turn within its budget. With no turns left, the task fails with the last output.
+
+### D9. Turn outputs checked on the real CLIs (2026-10-07)
+
+Claude Code 2.1.293, Codex 0.161.0 and agy 1.3.1 on the maintainer's Windows machine (details in spec 006 research §7):
+
+- **Claude Code**: the JSON result has `result`, `session_id`, `total_cost_usd`, `num_turns`; an error result has no `result` and carries `errors` (e.g. `Reached maximum budget ($0.05)`), which the adapter now reports.
+- **Codex**: `exec --json` prints `thread.started` with a `thread_id`, and `-o` holds the last message. `codex exec resume [SESSION_ID] [PROMPT]` exists but has no `-C`, `--color`, `-s` or `--approve-for-me`, and read-only teammates run `--ephemeral` (nothing to resume). Teammates keep the history in the prompt until a resume path for editing turns is tested.
+- **Antigravity**: `--output-format json` gives `{ conversation_id, status, response, num_turns, usage }`. After its own `--print-timeout`, agy exits 0 with status "SUCCESS" and whatever response it had, often none, and prints `[agy] print timeout after … with turn in progress` on stderr. The adapter treats that as a failed turn. When the turn never started because an MCP server could not connect, the error names the server, from the turn's `--log-file` (spec 006 FR-026).

@@ -21,8 +21,10 @@
     "./chain-guard": "./chain-guard.js",
     "./ancestry": "./ancestry.js",
     "./l1": "./l1.js",
+    "./mcp-scope": "./mcp-scope.js",
     "./configure-tool": "./configure-tool.js",
     "./claude": "./claude.js",
+    "./agy": "./agy.js",
     "./team": "./team/index.js",
     ".": "./index.js"
   },

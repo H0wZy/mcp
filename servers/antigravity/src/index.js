@@ -21,14 +21,21 @@ const {
   validateCwd,
   normalizePaths,
   clampTimeoutMinutes,
+  createAgyLog,
+  hitPrintTimeout,
+  stuckMcpServers,
+  stuckServersHint,
 } = shared;
 
-// A blocked edit is not instant: on Windows, a print run that tried to write a file
-// sat until --print-timeout. Telling the model up front keeps read-only calls fast.
+// Print mode soft-denies edits in read-only calls; telling the model up front saves the
+// turns it would spend trying.
 const READ_ONLY_NOTICE =
   'Read-only request: do not create, edit or delete files and do not run commands that change anything. ' +
   'Those actions are blocked here and only waste time. If a change is needed, describe it in your answer.';
 const STDERR_NOTICE_CHARS = 1500;
+// agy needs ~25 s around --print-timeout to start (CLI, sign-in, MCP servers) and to
+// return its partial output; the process limit leaves room for that.
+const PRINT_TIMEOUT_GRACE_MS = 60000;
 const READ_ONLY_ANNOTATIONS = { readOnlyHint: true, openWorldHint: true };
 
 async function loadAgyCatalog() {
@@ -172,18 +179,43 @@ async function executeAgyPrompt({
 
   for (const d of dirs) args.push('--add-dir', d);
 
-  const res = await executeProcess(agyBin, args, {
-    cwd: workDir,
+  // A private log explains a run that never started (an MCP server that can't connect).
+  const log = createAgyLog();
+  args.push('--log-file', log.file);
+
+  let res;
+  let hint = '';
+  try {
     // Outlive --print-timeout so agy can return its partial output itself, but never
     // the chain's deadline.
-    timeoutMs: hop ? hop.capTimeoutMs(minutes * 60000 + 30000) : minutes * 60000 + 30000,
-    signal,
-    toolName: 'agy',
-    env: hop?.childEnv,
-    onSpawn: hop ? (child) => hop.registerAgent(child.pid) : undefined,
-  });
+    const limitMs = minutes * 60000 + PRINT_TIMEOUT_GRACE_MS;
+    res = await executeProcess(agyBin, args, {
+      cwd: workDir,
+      timeoutMs: hop ? hop.capTimeoutMs(limitMs) : limitMs,
+      signal,
+      toolName: 'agy',
+      env: hop?.childEnv,
+      onSpawn: hop ? (child) => hop.registerAgent(child.pid) : undefined,
+    });
+    if (res.timedOut || hitPrintTimeout(res.stderr)) hint = stuckServersHint(stuckMcpServers(log.read()));
+  } finally {
+    log.cleanup();
+  }
 
   const footer = agentConfig.formatFooter(snapshot);
+
+  // agy exits 0 after its own --print-timeout, with whatever it had (often nothing).
+  if (!res.cancelled && (res.timedOut || hitPrintTimeout(res.stderr))) {
+    const partial = sanitizeOutput(res.stdout || '').trim();
+    return {
+      text:
+        (partial ? `${partial}\n\n⏱️ Antigravity did not finish within ${minutes} min; the answer above is partial.` : `⏱️ Antigravity did not finish within ${minutes} min and returned no answer.`) +
+        (hint ? `\n${hint}` : '') +
+        footer,
+      isError: true,
+      outcome: 'timed-out',
+    };
+  }
 
   if (res.ok) {
     // Read-only runs report soft-denied actions on stderr; pass that on so the caller

@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-06
 
-**Status**: Clarified (2026-10-07)
+**Status**: Clarified (2026-10-07); checked against the real CLIs on the maintainer's machine (2026-10-07, FR-026)
 
 **Input**: User description: "Create a spec so Antigravity and Codex can also use Claude Code — not only Claude Code calling them — so the three top agents on the market can talk to each other in any direction. Be very careful that this does not turn into an infinite loop that burns a huge amount of tokens."
 
@@ -34,6 +34,14 @@ The maintainer was away and asked for the work to continue without questions. Ea
 - Q: Which Claude models do the light / balanced / deep tiers use? → A: light = `sonnet` at `low`, balanced = `opus` at `medium` (also the startup default), deep = `fable` at `high`. These are Claude Code's model aliases, so new model releases need no code change.
 - Q: How does a bridge detect nesting when the host strips the chain variables (FR-003)? → A: A per-user registry of running bridge-started agents (`~/.h0wzy-mcp/agents/<pid>.json`) plus a walk up the bridge's process ancestors. It reads `/proc` on Linux, `ps` on macOS, and a PowerShell process query on Windows, cached once per server. If agents are registered and the ancestry can't be read, the call fails closed and is treated as being at the maximum depth.
 - Q: Where is the optional chain log, and how is it turned on (FR-024)? → A: It is a JSON Lines file at `~/.h0wzy-mcp/chain.log`, turned on with `H0WZY_MCP_CHAIN_LOG=1`. Each line holds run id, caller, agent, depth, outcome and duration, and never any prompt text.
+
+### Session 2026-10-07 (real CLIs, maintainer's Windows machine)
+
+Measured with Claude Code 2.1.293, Codex 0.161.0 and agy 1.3.1 (research §7). The maintainer approved the test steps; the decisions follow the measurements.
+
+- Q: Which MCP servers does an agent started by a bridge load (FR-026)? → A: Below the maximum depth, only the H0wZy/mcp mesh bridges (`codex`, `antigravity`, `claude`); at it, none (FR-010). The user's other MCP servers stay off: with them, one `claude -p` call carried ~380k tokens of tool definitions (US$ 0.38 on Haiku, against US$ 0.0012 without), and `codex exec` took 37 s instead of 19 s. `H0WZY_MCP_USER_SERVERS=1` lets nested agents load the user's own servers again. Antigravity has no per-call switch, so it keeps loading all of its servers.
+- Q: Where does the Claude bridge find the mesh bridges to pass on? → A: In Claude Code's user config (`~/.claude.json`, or `$CLAUDE_CONFIG_DIR/.claude.json`): the user scope, plus the local scope of the working folder. Never in a project's `.mcp.json`: Claude Code asks before it starts a project server, and passing one through `--mcp-config` would skip that approval for whatever a cloned repository calls "codex".
+- Q: What happens when Antigravity waits for an MCP server that never connects? → A: agy starts a print-mode turn only after every configured server has connected, and `agy mcp disable` did not stop the wait. The run ends at `--print-timeout` with exit code 0, an empty answer and status "SUCCESS". The bridges treat that as a timed-out call (an error) and, from a private `--log-file`, name the servers agy was still waiting for.
 
 ---
 
@@ -179,7 +187,11 @@ Every bridge response ends with a short trace line, for example `[chain claude�
 
 **Compatibility**
 
-- **FR-025**: Existing tools MUST keep working as they are called today. For a top-level call, the only visible change is the added trace line.
+- **FR-025**: Existing tools MUST keep working as they are called today. For a top-level call, the visible changes are the added trace line and the narrower MCP scope of the agent it starts (FR-026).
+
+**Cost of nested agents**
+
+- **FR-026**: An agent started by a bridge MUST load only the MCP servers the mesh needs: the H0wZy/mcp agent bridges below the maximum depth, none at it (FR-010), and never the team server. The user's other MCP servers MUST stay off wherever the target CLI offers a per-call way to do so, unless the developer opts in (`H0WZY_MCP_USER_SERVERS=1`). The bridge MUST NOT pass on servers from a project's own config, which the host would otherwise ask the user to approve. Where a target CLI can't be scoped and a server it waits for keeps a run from starting, the bridge MUST report the run as timed out and name the server.
 
 ### Key Entities
 

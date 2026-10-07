@@ -268,6 +268,7 @@ func renderBridgeGraph(out io.Writer, g bridgeGraph) {
 	}
 
 	fmt.Fprintf(out, "%s %s\n", headingStyle.Render("🛡  Loop guard:"), g.Guard.Summary())
+	fmt.Fprintf(out, "  %s\n", dimStyle.Render(g.Guard.NestedServers()+"; Antigravity always loads all of its own"))
 	if len(g.Guard.Overrides) > 0 {
 		fmt.Fprintf(out, "  %s\n", dimStyle.Render("set in this shell (bridges use their host's environment):"))
 	}

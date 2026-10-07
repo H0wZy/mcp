@@ -91,7 +91,7 @@ func TestInstallTeamWritesServerAndSkillInEveryHost(t *testing.T) {
 	for _, want := range []string{
 		"[mcp_servers.team]\ncommand = \"npx\"\nargs = [\"-y\", \"@h0wzy/mcp-server-team\", \"--host\", \"codex\"]\nenv_vars = [",
 		`"H0WZY_MCP_CHAIN", `,
-		`"H0WZY_MCP_CHAIN_LOG", "H0WZY_TEAM_MAX_TEAMMATES", "H0WZY_TEAM_MAX_TURNS", "H0WZY_TEAM_MAX_TOTAL_TURNS", "H0WZY_TEAM_DEADLINE_MINUTES", "H0WZY_TEAM_TURN_MINUTES", "H0WZY_TEAM_RESULT_CAP", "H0WZY_TEAM_ALLOW_CHECKS"]`,
+		`"H0WZY_MCP_CHAIN_LOG", "H0WZY_MCP_USER_SERVERS", "H0WZY_TEAM_MAX_TEAMMATES", "H0WZY_TEAM_MAX_TURNS", "H0WZY_TEAM_MAX_TOTAL_TURNS", "H0WZY_TEAM_DEADLINE_MINUTES", "H0WZY_TEAM_TURN_MINUTES", "H0WZY_TEAM_RESULT_CAP", "H0WZY_TEAM_ALLOW_CHECKS"]`,
 		"tool_timeout_sec = 3900\nstartup_timeout_sec = 60",
 	} {
 		if !strings.Contains(codex, want) {

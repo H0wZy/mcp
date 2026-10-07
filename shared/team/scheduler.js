@@ -8,6 +8,7 @@ import { executeProcess } from '../executor.js';
 import { resolveBinary } from '../resolver.js';
 import { beginHop, createRootChain } from '../chain-guard.js';
 import { sanitizeOutput } from '../errors.js';
+import { hitPrintTimeout } from '../agy.js';
 import { TeamStore, NAME_PATTERN } from './store.js';
 import { addTasks, nextTaskFor, claim, unblockedBy, formatTask, TASK_STATUSES } from './tasks.js';
 import { parseReport, compact } from './report.js';
@@ -124,26 +125,36 @@ export async function runTurnProcess({ team, member, prompt, signal, minutes }) 
   const decision = beginHop({ target: member.agent, host: 'team', tool: 'team_turn', env: team.env, chain: team.chain(), claim: false });
   if (!decision.ok) return { ok: false, error: decision.refusal.text.split('\n')[0], text: '' };
   const hop = decision.hop;
-  const outputFile = member.agent === 'codex' ? join(team.store.resultsDir, `.codex-${member.name}-${member.turns}.txt`) : undefined;
-  const turn = buildTurn({ member, prompt: `${hop.notice}\n\n${prompt}`, hop, outputFile, minutes, env: team.env });
+  const scratch = (ext) => join(team.store.resultsDir, `.${member.agent}-${member.name}-${member.turns}.${ext}`);
+  const outputFile = member.agent === 'codex' ? scratch('txt') : undefined;
+  const logFile = member.agent === 'antigravity' ? scratch('log') : undefined;
+  const turn = buildTurn({ member, prompt: `${hop.notice}\n\n${prompt}`, hop, outputFile, logFile, minutes, env: team.env });
   if (!turn.ok) {
     hop.finish('failed');
     return { ok: false, error: turn.error, text: '' };
   }
-  const graceMs = member.agent === 'antigravity' ? 30000 : 0;
-  const res = await executeProcess(turn.command, turn.args, {
-    cwd: turn.cwd,
-    input: turn.input,
-    env: turn.env,
-    timeoutMs: hop.capTimeoutMs(minutes * 60000 + graceMs),
-    signal,
-    toolName: member.agent === 'antigravity' ? 'agy' : member.agent,
-    onSpawn: (child) => hop.registerAgent(child.pid),
-  });
-  const parsed = parseTurn(member.agent, res, { outputFile, sessionId: turn.sessionId });
-  hop.finish(res.cancelled ? 'cancelled' : parsed.ok ? 'ran' : res.timedOut ? 'timed-out' : 'failed');
-  if (outputFile) rmSync(outputFile, { force: true });
-  return { ...parsed, cancelled: res.cancelled, timedOut: res.timedOut, warnings: turn.warnings };
+  // agy needs ~25 s around --print-timeout to start and to return its partial output.
+  const graceMs = member.agent === 'antigravity' ? 60000 : 0;
+  let res;
+  let parsed;
+  try {
+    res = await executeProcess(turn.command, turn.args, {
+      cwd: turn.cwd,
+      input: turn.input,
+      env: turn.env,
+      timeoutMs: hop.capTimeoutMs(minutes * 60000 + graceMs),
+      signal,
+      toolName: member.agent === 'antigravity' ? 'agy' : member.agent,
+      onSpawn: (child) => hop.registerAgent(child.pid),
+    });
+    parsed = parseTurn(member.agent, res, { outputFile, logFile, sessionId: turn.sessionId });
+  } finally {
+    turn.cleanup();
+    for (const file of [outputFile, logFile]) if (file) rmSync(file, { force: true });
+  }
+  const timedOut = res.timedOut || (member.agent === 'antigravity' && !parsed.ok && hitPrintTimeout(res.stderr));
+  hop.finish(res.cancelled ? 'cancelled' : parsed.ok ? 'ran' : timedOut ? 'timed-out' : 'failed');
+  return { ...parsed, cancelled: res.cancelled, timedOut, warnings: turn.warnings };
 }
 
 export class Team {

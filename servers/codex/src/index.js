@@ -14,7 +14,7 @@ const {
   formatResilientResponse,
   createAgentConfig,
   createConfigureTool,
-  noBridgeArgs,
+  codexMcpArgs,
   validateCwd,
   normalizePaths,
   clampTimeoutMinutes,
@@ -132,8 +132,9 @@ async function executeCodexCommand(
     '-c',
     `model_reasoning_effort=${snapshot.cliEffort}`,
     ...ACCESS_OVERRIDES[access],
-    // L1: at the maximum depth, start Codex with its bridge servers switched off.
-    ...(hop?.atMaxDepth ? noBridgeArgs('codex') : []),
+    // FR-026: the user's other MCP servers stay off (they doubled start-up time), and
+    // at the maximum depth the bridges go too (L1).
+    ...codexMcpArgs({ atMaxDepth: hop?.atMaxDepth }),
     '-',
   ];
 

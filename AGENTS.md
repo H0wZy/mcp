@@ -10,7 +10,7 @@ H0wZy/mcp connects the three leading coding agents (Claude Code, Codex, Antigrav
 
 | Path | What lives there |
 |---|---|
-| `shared/` | Zero-dependency core used by every server: `server.js` (JSON-RPC 2.0 stdio loop), `executor.js` (child process runner), `resolver.js` (binary lookup, PATHEXT), `errors.js` (resilient errors + secret redaction), `agent-config.js` (model / effort / tiers, spec 005), `configure-tool.js` (the shared `configure_*` tool), `chain-guard.js` + `ancestry.js` + `l1.js` (loop guard, spec 006) |
+| `shared/` | Zero-dependency core used by every server: `server.js` (JSON-RPC 2.0 stdio loop), `executor.js` (child process runner), `resolver.js` (binary lookup, PATHEXT), `errors.js` (resilient errors + secret redaction), `agent-config.js` (model / effort / tiers, spec 005), `configure-tool.js` (the shared `configure_*` tool), `chain-guard.js` + `ancestry.js` + `l1.js` (loop guard, spec 006), `mcp-scope.js` (which MCP servers a nested agent loads, FR-026), `claude.js` / `agy.js` (CLI-specific helpers: nested env, result parsing, agy timeout diagnosis) |
 | `servers/codex/`, `servers/antigravity/`, `servers/claude/` | One MCP server per target agent. Same tool family on each: `ask_*`, `review_*`, `brainstorm_*`, `plan_*`, `delegate_*`, `configure_*` |
 | `servers/team/`, `shared/team/` | Agent team orchestrator (spec 007): `team_*` / `task_*` tools in the server; the engine (store, task graph, report parser, per-vendor turn adapters, scheduler) in `shared/team/` |
 | `cli/skills/agent-team/SKILL.md` | The `agent-team` skill. `hmcp` embeds it and copies it to each harness's skill folder |
@@ -49,7 +49,7 @@ Rules:
 - If a `research.md` already exists when you run `speckit-plan`, extend it. Don't replace it.
 - `.specify/memory/constitution.md` is still the unfilled template. Until it is ratified (`speckit-constitution`), use the rules in this file as the project principles.
 
-Current roadmap: `005` model / effort control, `006` bidirectional mesh + loop guard, and `007` multi-vendor agent team orchestrator are all implemented and ship together in v1.0.6. Next candidates: Option C peer tools for teammates (spec 007 research), and Codex session resume once its JSON thread id is verified.
+Current roadmap: `005` model / effort control, `006` bidirectional mesh + loop guard, and `007` multi-vendor agent team orchestrator are all implemented and ship together in v1.0.6. Next candidates: Option C peer tools for teammates (spec 007 research), and Codex session resume for teammates (the JSON `thread_id` is verified, but `codex exec resume` lacks `-C` and `--approve-for-me`; spec 007 research D9).
 
 ## Coding rules
 
@@ -64,7 +64,7 @@ Current roadmap: `005` model / effort control, `006` bidirectional mesh + loop g
   - `registerAgent` in `onSpawn`;
   - `capTimeoutMs` for the timeout;
   - `notice` at the top of the prompt;
-  - `noBridgeArgs()` when `atMaxDepth`.
+  - the MCP scope for the target (FR-026): `claudeMcpArgs()` (call its `cleanup()` when the run ends) or `codexMcpArgs()` from `shared/mcp-scope.js`, and `noBridgeArgs('antigravity')` when `atMaxDepth`.
 - Every task tool response ends with the execution footer (`[provider · model=… · effort=… · source=…]`).
 - Errors go through `formatResilientResponse`. Never throw raw provider output at the client.
 
@@ -77,7 +77,7 @@ Current roadmap: `005` model / effort control, `006` bidirectional mesh + loop g
 **Tests**
 - Use `node:test` + `node:assert/strict`. Tests must not need the real `codex`, `agy` or `claude` binaries. Use `test/helpers/fake-agent.js` (fake binaries set through `CODEX_CLI_PATH` / `AGY_BIN`; they record argv, stdin and cwd) and assert on the exact argv, as `test/argv.test.js` does. A change to the flags passed to an agent must update that test.
 - Tests that capture `process.stdout.write` must pass through anything that isn't a JSON-RPC line, because the test runner writes there too.
-- Tests that call bridge tools import `test/helpers/guard-env.js` first. It clears inherited `H0WZY_MCP_*` chain variables (an agent running the tests may carry them) and points the guard state at a temp dir.
+- Tests that call bridge tools import `test/helpers/guard-env.js` first. It clears inherited `H0WZY_MCP_*` chain variables (an agent running the tests may carry them), points the guard state at a temp dir, and points `CODEX_HOME` / `CLAUDE_CONFIG_DIR` at empty temp dirs so no test reads the developer's real agent configs. Unit tests that build agent command lines directly set those two variables themselves.
 
 ## Security rules
 

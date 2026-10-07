@@ -81,6 +81,7 @@ Or using local source:
 - **Cross-Platform**: Automatically locates `codex.cmd` (Windows) or `codex` (macOS/Linux) via native PATH resolution.
 - **Rate Limit & Quota Resilience**: Gracefully traps HTTP 429 and rate-limit errors, returning structured fallback responses rather than crashing the client session.
 - **Privacy & Security**: Built-in credential redaction proactively masks API keys, OpenAI tokens (`sk-...`), and authorization headers from error messages.
+- **Lean sessions**: the Codex it starts loads only the H0wZy/mcp bridges from your `config.toml`. Every other MCP server is switched off for that run (`-c mcp_servers.<name>.enabled=false`), which cut a one-line answer from 37 s to 13 s on a real setup. `H0WZY_MCP_USER_SERVERS=1` keeps your servers.
 
 ---
 

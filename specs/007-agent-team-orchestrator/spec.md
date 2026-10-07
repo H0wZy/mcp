@@ -39,7 +39,7 @@ The maintainer was away and asked for the work to continue without questions. Ea
 - Q: How does a teammate keep its context between turns (FR-004)? → A:
   - Claude Code resumes its own session (`--session-id` on the first turn, `--resume` after).
   - Antigravity continues its conversation (`--conversation <id>` from its JSON output).
-  - Codex gets a compact history of its earlier turns in the prompt. Codex resume needs a thread id from its JSON event stream, which is not yet verified against a real run.
+  - Codex gets a compact history of its earlier turns in the prompt. A real run (2026-10-07, Codex 0.161.0) confirmed that `codex exec --json` reports a `thread_id`, but `codex exec resume` takes neither `-C` nor `--approve-for-me`, so resuming editing teammates is left for a follow-up (research D9).
 - Q: What is the team skill called? → A: `agent-team`. Invoke it with `/agent-team` in Claude Code and Antigravity, `$agent-team` in Codex, or ask in plain language.
 - Q: May teammates edit files by default, and where? → A: No, teammates are read-only unless spawned with `can_edit: true`. An editing teammate in a git repository works in its own worktree by default (`isolation: "worktree"`), and the lead pulls in its change set. `isolation: "none"` shares the project folder.
 

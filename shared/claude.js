@@ -10,6 +10,7 @@ export const INHERITED_CLAUDE_SESSION_VARS = [
   'CLAUDE_CODE_CHILD_SESSION',
   'CLAUDE_CODE_MESSAGING_SOCKET',
   'CLAUDE_CODE_MESSAGING_TOKEN',
+  'CLAUDE_CODE_SESSION_ATTENDED',
   'CLAUDE_EFFORT',
   'CLAUDE_PID',
 ];
@@ -26,7 +27,9 @@ export function claudeChildEnv(extra = {}) {
 
 /**
  * Reads `claude -p --output-format json` output. Falls back to the raw text when the
- * CLI printed something else (older versions, crashes).
+ * CLI printed something else (older versions, crashes). An error result has no
+ * `result` field; its reason is in `errors` (e.g. "Reached maximum budget ($0.05)",
+ * verified with Claude Code 2.1.293).
  */
 export function parseClaudeResult(stdout) {
   const text = (stdout || '').trim();
@@ -41,6 +44,7 @@ export function parseClaudeResult(stdout) {
           text: typeof data.result === 'string' ? data.result : '',
           isError: Boolean(data.is_error) || (typeof data.subtype === 'string' && data.subtype.startsWith('error')),
           subtype: data.subtype,
+          errors: Array.isArray(data.errors) ? data.errors.filter((e) => typeof e === 'string' && e) : [],
           cost: Number.isFinite(data.total_cost_usd) ? data.total_cost_usd : undefined,
           turns: Number.isInteger(data.num_turns) ? data.num_turns : undefined,
           sessionId: typeof data.session_id === 'string' ? data.session_id : undefined,
@@ -50,7 +54,7 @@ export function parseClaudeResult(stdout) {
       /* not JSON */
     }
   }
-  return { json: false, text, isError: false };
+  return { json: false, text, isError: false, errors: [] };
 }
 
 /**

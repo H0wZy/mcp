@@ -73,7 +73,7 @@ We introduced `SanitizeHealthMessage(msg)`:
 - **Before**: `publish-packages.yml` lacked `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}` and had `continue-on-error: true` on all publish steps, silently passing even when npm publish failed with 404/401.
 - **Hardening**: Added `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}` and removed `continue-on-error: true`, ensuring publishing failures are surfaced immediately.
 
-### 4.4 v1.0.6 hardening (Phase 0 review and spec 006)
+### 4.4 v1.0.6 hardening (Phase 0 review, spec 006 and the real-CLI checks)
 - **Least privilege for read-only tools**:
   - Codex read tools run with `sandbox_mode=read-only` and `approval_policy=never`.
   - Antigravity read tools run without `--dangerously-skip-permissions`, so print mode soft-denies edits and unapproved commands.
@@ -87,7 +87,11 @@ We introduced `SanitizeHealthMessage(msg)`:
   - npm and pnpm `.cmd` shims run as `node <script>`, without `cmd.exe`.
   - Any other `.cmd` gets quoted arguments, and values `cmd.exe` would expand (`"`, `%`, `!`, line breaks) are refused.
 - **Loop guard** (`shared/chain-guard.js`, spec 006): bridge chains are capped by depth, revisits, call budget and deadline before anything is spawned. The guard fails closed when a nested call can't be traced. Its state files (`~/.h0wzy-mcp/`) are written with mode `0600`, and the opt-in log never contains prompt text.
-- **Inherited session variables**: the Claude bridge drops a Claude Code ancestor's session variables, including `CLAUDE_CODE_MESSAGING_TOKEN`, before it starts `claude`.
+- **Inherited session variables**: the Claude bridge drops a Claude Code ancestor's session variables, including `CLAUDE_CODE_MESSAGING_TOKEN` and `CLAUDE_CODE_SESSION_ATTENDED`, before it starts `claude`.
+- **MCP scope of nested agents** (`shared/mcp-scope.js`, spec 006 FR-026): a nested Claude Code or Codex loads only the H0wZy/mcp agent bridges, never the user's other servers (opt-in with `H0WZY_MCP_USER_SERVERS=1`), so a bridge call can't reach the tools of unrelated servers.
+  - The bridges passed to Claude Code come only from the user's own `~/.claude.json` (user scope, and the local scope of the working folder). A project's `.mcp.json` is never read: Claude Code asks before it starts a project server, and passing one through `--mcp-config` would skip that approval for whatever a cloned repository calls "codex".
+  - Their definitions travel in a temp file (`h0wzy-mcp-*/mcp.json`, mode `0600`, removed when the call ends), not on the command line, where other local processes could read any env values they carry.
+- **Antigravity logs** (`shared/agy.js`): each run gets a private `--log-file` in a fresh temp folder. Only the names of MCP servers that never connected are read from it, and the folder is removed when the call ends (the log holds the account e-mail and permission lists).
 - **Config writers** (`cli/config/`):
   - A file that fails to parse is refused instead of overwritten.
   - Writes are atomic.

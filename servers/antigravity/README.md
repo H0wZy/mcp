@@ -22,7 +22,7 @@ Part of the **[H0wZy/mcp](https://github.com/H0wZy/mcp)** multi-agent ecosystem.
 
 > `delegate_antigravity` writes to disk and never commits. Review the diff (`git diff`) before keeping its changes.
 >
-> **Read-only tools** (`ask_*`, `review_*`, `brainstorm_*`, `plan_*`) run `agy` without `--dangerously-skip-permissions`. In print mode Antigravity then soft-denies anything that needs approval (file edits, and shell commands or MCP tools you haven't allowed): nothing is written, and any notice agy prints (skipped actions, a print timeout) is listed under "Antigravity notices" in the answer. These calls also tell the model up front that the request is read-only, because a blocked edit can otherwise keep the run busy until its time limit. To let reviews run commands such as `git diff`, add rules like `"command(git)"` to `permissions.allow` in `~/.gemini/antigravity-cli/settings.json` ([permissions docs](https://antigravity.google/docs/permissions?tab=cli)). Only `delegate_antigravity` auto-approves.
+> **Read-only tools** (`ask_*`, `review_*`, `brainstorm_*`, `plan_*`) run `agy` without `--dangerously-skip-permissions`. In print mode Antigravity then soft-denies anything that needs approval (file edits, and shell commands or MCP tools you haven't allowed): nothing is written, and any notice agy prints (skipped actions) is listed under "Antigravity notices" in the answer. These calls also tell the model up front that the request is read-only, which saves the turns it would spend trying. To let reviews run commands such as `git diff`, add rules like `"command(git)"` to `permissions.allow` in `~/.gemini/antigravity-cli/settings.json` ([permissions docs](https://antigravity.google/docs/permissions?tab=cli)). Only `delegate_antigravity` auto-approves.
 >
 > **Default model:** `Gemini 3.8 Flash (High)`. Override per call (`model`, `effort`), per session with `configure_antigravity`, or at startup with `AGY_MODEL` / `AGY_EFFORT`.
 
@@ -85,6 +85,7 @@ Or using local source:
 - **Cross-Platform**: Automatically locates `agy.exe` (Windows) or `agy` (macOS/Linux) via native PATH resolution.
 - **Rate Limit & Quota Resilience**: Gracefully traps HTTP 429 and `ResourceExhausted` errors, returning structured fallback responses rather than crashing the client session.
 - **Privacy & Security**: Built-in credential redaction proactively masks API keys, Google tokens, and sensitive headers from error messages.
+- **MCP servers that never connect**: `agy` loads every server in `~/.gemini/config/mcp_config.json` on each call and starts its turn only once all of them have connected. One unreachable server makes every call wait until its time limit and come back empty. The bridge reports that as `⏱️ Antigravity did not finish within N min…` and names the servers agy was still waiting for (from a private `--log-file`, deleted after the call). Bring the server back online or remove it with `agy mcp remove <name>`; `agy mcp disable` did not stop the wait in agy 1.3.1.
 
 ---
 

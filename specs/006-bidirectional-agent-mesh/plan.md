@@ -12,6 +12,8 @@
    - **L1**: an agent started at the maximum depth gets no bridge tools where its CLI allows it.
    - **L2**: the runtime check above.
    - **L3**: a position notice at the top of the prompt.
+
+   Below the maximum depth, an agent started by a bridge loads only the mesh bridges, not the user's other MCP servers (FR-026, `shared/mcp-scope.js`, added after the real-CLI checks in research §7).
 2. **Claude Code bridge** (`servers/claude`, npm `@h0wzy/mcp-server-claude`). It has the same six tools as the other bridges, runs `claude -p` with prompts on stdin and `--output-format json`, and uses `createAgentConfig({ provider: 'claude' })` for spec 005 parity.
    - Read-only tools run with only `Read`, `Grep` and `Glob`.
    - Delegation uses `acceptEdits` with `--permission-prompts none`.
@@ -103,7 +105,10 @@ specs/006-bidirectional-agent-mesh/
 shared/
 ├── chain-guard.js        # NEW: policy, beginHop(), refusals, trace, registry, chain log
 ├── ancestry.js           # NEW: process ancestors per platform (cached)
-├── l1.js                 # NEW: per-target "no bridge tools" argv (claude / codex / agy)
+├── l1.js                 # NEW: per-target "no bridge tools" argv (claude / codex / agy), bridgeKind
+├── mcp-scope.js          # NEW (FR-026): MCP servers a nested claude / codex loads
+├── agy.js                # NEW (FR-026): agy print-timeout and stuck-MCP-server diagnosis
+├── claude.js             # NEW: nested claude env, JSON result parsing, caps
 ├── executor.js           # + onSpawn option
 ├── server.js             # + spawnsAgent tools go through the guard; trace appended
 ├── agent-config.js       # + 'claude' provider (catalog, tiers, CLAUDE_ prefix, no-effort models)
@@ -129,7 +134,7 @@ cli/
 
 ## Phase 0: Research
 
-See [research.md](./research.md). Its sections 1–5 are pre-plan research. Section 6 records the decisions made for this plan: chain identity, budget slots, the ancestry fallback, the L1 flags per CLI, the Claude argv, and the installer's host flag.
+See [research.md](./research.md). Its sections 1–5 are pre-plan research. Section 6 records the decisions made for this plan: chain identity, budget slots, the ancestry fallback, the L1 flags per CLI, the Claude argv, and the installer's host flag. Section 7 records what the real CLIs did on the maintainer's machine and the decisions that followed (FR-026).
 
 ## Phase 1: Design & Contracts
 

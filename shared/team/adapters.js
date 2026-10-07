@@ -5,7 +5,9 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolveBinary } from '../resolver.js';
 import { noBridgeArgs } from '../l1.js';
+import { claudeMcpArgs, codexMcpArgs } from '../mcp-scope.js';
 import { claudeCapArgs, claudeChildEnv, parseClaudeResult } from '../claude.js';
+import { hitPrintTimeout, parseAgyEnvelope, readLogTail, stuckMcpServers, stuckServersHint } from '../agy.js';
 
 export const TEAM_AGENTS = ['claude', 'codex', 'antigravity'];
 
@@ -40,18 +42,20 @@ const INSTALL_HINTS = {
  * @param {string} options.prompt
  * @param {{ atMaxDepth: boolean, childEnv: object } | null} [options.hop]
  * @param {string} [options.outputFile] Codex writes its last message here
+ * @param {string} [options.logFile] agy writes its log here (explains a stuck turn)
  * @param {number} [options.minutes] Turn limit, for agy's --print-timeout
  * @param {NodeJS.ProcessEnv} [options.env]
- * @returns {{ ok: true, command: string, args: string[], input?: string, cwd: string, env: object, sessionId: string|null, warnings: string[] } | { ok: false, error: string }}
+ * @returns {{ ok: true, command: string, args: string[], input?: string, cwd: string, env: object, sessionId: string|null, warnings: string[], cleanup: () => void } | { ok: false, error: string }}
  */
-export function buildTurn({ member, prompt, hop = null, outputFile, minutes = 20, env = process.env }) {
+export function buildTurn({ member, prompt, hop = null, outputFile, logFile, minutes = 20, env = process.env }) {
   const [bin, override] = BINARIES[member.agent] || [];
   if (!bin) return { ok: false, error: `Unknown agent '${member.agent}'. Use one of: ${TEAM_AGENTS.join(', ')}.` };
   const command = resolveBinary(bin, override);
   if (!command) return { ok: false, error: `\`${bin}\` not found. ${INSTALL_HINTS[member.agent]}` };
 
-  const l1 = hop?.atMaxDepth ? noBridgeArgs(member.agent) : [];
+  const atMaxDepth = Boolean(hop?.atMaxDepth);
   const chainEnv = hop?.childEnv || {};
+  const noCleanup = () => {};
 
   if (member.agent === 'claude') {
     const { args: caps, warnings } = claudeCapArgs(env);
@@ -67,8 +71,10 @@ export function buildTurn({ member, prompt, hop = null, outputFile, minutes = 20
       sessionId = randomUUID();
       args.push('--session-id', sessionId);
     }
-    args.push(...caps, ...l1);
-    return { ok: true, command, args, input: prompt, cwd: member.workDir, env: claudeChildEnv(chainEnv), sessionId, warnings };
+    // FR-026 (spec 006): only the mesh bridges; none at the maximum depth.
+    const mcp = claudeMcpArgs({ atMaxDepth, cwd: member.workDir, env });
+    args.push(...caps, ...mcp.args);
+    return { ok: true, command, args, input: prompt, cwd: member.workDir, env: claudeChildEnv(chainEnv), sessionId, warnings, cleanup: mcp.cleanup };
   }
 
   if (member.agent === 'codex') {
@@ -83,7 +89,7 @@ export function buildTurn({ member, prompt, hop = null, outputFile, minutes = 20
       '-c',
       `model_reasoning_effort=${member.cliEffort}`,
       ...access,
-      ...l1,
+      ...codexMcpArgs({ atMaxDepth, env }),
       '-',
       '--color',
       'never',
@@ -93,7 +99,7 @@ export function buildTurn({ member, prompt, hop = null, outputFile, minutes = 20
     if (outputFile) args.push('-o', outputFile);
     args.push('-C', member.workDir);
     // Codex has no verified resume path here: earlier turns travel in the prompt.
-    return { ok: true, command, args, input: prompt, cwd: member.workDir, env: chainEnv, sessionId: null, warnings: [] };
+    return { ok: true, command, args, input: prompt, cwd: member.workDir, env: chainEnv, sessionId: null, warnings: [], cleanup: noCleanup };
   }
 
   // antigravity: agy reads the prompt from -p (no text stdin mode), and a command line
@@ -103,23 +109,10 @@ export function buildTurn({ member, prompt, hop = null, outputFile, minutes = 20
   args.push('--print-timeout', `${Math.max(1, Math.floor(minutes))}m`, '--output-format', 'json');
   if (member.canEdit) args.push('--dangerously-skip-permissions');
   if (member.sessionId) args.push('--conversation', member.sessionId);
-  args.push(...l1);
-  return { ok: true, command, args, cwd: member.workDir, env: chainEnv, sessionId: member.sessionId, warnings: [] };
-}
-
-function parseAgyEnvelope(stdout) {
-  const text = String(stdout ?? '').trim();
-  const candidates = [text, text.slice(text.lastIndexOf('\n{') + 1)];
-  for (const c of candidates) {
-    if (!c.startsWith('{')) continue;
-    try {
-      const data = JSON.parse(c);
-      if (data && typeof data === 'object' && ('response' in data || 'conversation_id' in data || 'error' in data)) return data;
-    } catch {
-      /* not the envelope */
-    }
-  }
-  return null;
+  if (logFile) args.push('--log-file', logFile);
+  // L1: agy has no per-call MCP switch; at least stop prompt-driven skill expansion.
+  if (atMaxDepth) args.push(...noBridgeArgs('antigravity'));
+  return { ok: true, command, args, cwd: member.workDir, env: chainEnv, sessionId: member.sessionId, warnings: [], cleanup: noCleanup };
 }
 
 /**
@@ -127,19 +120,20 @@ function parseAgyEnvelope(stdout) {
  *
  * @param {string} agent
  * @param {{ ok: boolean, stdout: string, stderr: string, exitCode: number, timedOut: boolean }} res executeProcess result
- * @param {{ outputFile?: string, sessionId?: string|null }} [options]
+ * @param {{ outputFile?: string, logFile?: string, sessionId?: string|null }} [options]
  * @returns {{ ok: boolean, text: string, sessionId: string|null, usage: { costUsd?: number, inputTokens?: number, outputTokens?: number }, error: string|null }}
  */
-export function parseTurn(agent, res, { outputFile, sessionId = null } = {}) {
+export function parseTurn(agent, res, { outputFile, logFile, sessionId = null } = {}) {
   const fail = (error, text = '') => ({ ok: false, text, sessionId, usage: {}, error });
-  if (res.timedOut) return fail('the turn timed out', res.stdout);
+  if (res.timedOut) return fail(withStuckServers('the turn timed out', agent, logFile), res.stdout);
 
   if (agent === 'claude') {
     const parsed = parseClaudeResult(res.stdout);
     const usage = parsed.cost !== undefined ? { costUsd: parsed.cost } : {};
     const sid = parsed.sessionId || sessionId;
     if (!res.ok || parsed.isError) {
-      return { ok: false, text: parsed.text, sessionId: sid, usage, error: (res.stderr || parsed.subtype || parsed.text || `exit code ${res.exitCode}`).slice(0, 2000) };
+      const reason = res.stderr || parsed.errors.join('; ') || parsed.subtype || parsed.text || `exit code ${res.exitCode}`;
+      return { ok: false, text: parsed.text, sessionId: sid, usage, error: reason.slice(0, 2000) };
     }
     return { ok: true, text: parsed.text, sessionId: sid, usage, error: null };
   }
@@ -164,7 +158,18 @@ export function parseTurn(agent, res, { outputFile, sessionId = null } = {}) {
   const usage = data?.usage
     ? { inputTokens: Number(data.usage.input_tokens) || 0, outputTokens: Number(data.usage.output_tokens) || 0 }
     : {};
+  // agy exits 0 at its own --print-timeout and still reports status "SUCCESS".
+  if (hitPrintTimeout(res.stderr)) {
+    return { ok: false, text, sessionId: sid, usage, error: withStuckServers("the turn hit agy's --print-timeout", agent, logFile) };
+  }
   const error = data?.error ? (typeof data.error === 'string' ? data.error : JSON.stringify(data.error)) : null;
   if (!res.ok || error) return { ok: false, text, sessionId: sid, usage, error: (error || res.stderr || `exit code ${res.exitCode}`).slice(0, 2000) };
   return { ok: true, text, sessionId: sid, usage, error: null };
+}
+
+/** Adds the MCP servers a stuck agy turn was waiting for, when its log names them. */
+function withStuckServers(error, agent, logFile) {
+  if (agent !== 'antigravity' || !logFile) return error;
+  const hint = stuckServersHint(stuckMcpServers(readLogTail(logFile)));
+  return hint ? `${error}. ${hint}` : error;
 }

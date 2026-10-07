@@ -1,8 +1,9 @@
-// Fake `codex` / `agy` binaries for tests: they record argv and stdin and answer
-// without touching any real model. Behaviour is driven by environment variables
-// that the servers pass through to the agents they spawn (FAKE_AGENT_LOG,
-// FAKE_AGENT_MODE=sleep|bridge, FAKE_AGENT_PIDFILE, FAKE_AGENT_STDERR, FAKE_AGENT_STDOUT,
-// FAKE_AGENT_EXIT, FAKE_BRIDGE_PLAN, FAKE_AGENT_STRIP_ENV, FAKE_TEAMMATE_SLEEP_MS,
+// Fake `codex` / `agy` / `claude` binaries for tests: they record argv, stdin and the
+// content of a --mcp-config file, and answer without touching any real model. Behaviour
+// is driven by environment variables that the servers pass through to the agents they
+// spawn (FAKE_AGENT_LOG, FAKE_AGENT_MODE=sleep|bridge, FAKE_AGENT_PIDFILE,
+// FAKE_AGENT_STDERR, FAKE_AGENT_STDOUT, FAKE_AGENT_EXIT, FAKE_AGENT_LOG_TEXT (written to
+// the --log-file path), FAKE_BRIDGE_PLAN, FAKE_AGENT_STRIP_ENV, FAKE_TEAMMATE_SLEEP_MS,
 // FAKE_TEAMMATE_TEXT, FAKE_TEAMMATE_WRITE).
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -19,8 +20,13 @@ const done = () => {
   if (fired) return;
   fired = true;
   if (process.env.FAKE_AGENT_LOG) {
-    fs.appendFileSync(process.env.FAKE_AGENT_LOG, JSON.stringify({ argv, input, cwd: process.cwd() }) + '\\n');
+    const m = argv.indexOf('--mcp-config');
+    let mcpConfig;
+    try { mcpConfig = m >= 0 ? JSON.parse(fs.readFileSync(argv[m + 1], 'utf8')) : undefined; } catch { mcpConfig = 'unreadable'; }
+    fs.appendFileSync(process.env.FAKE_AGENT_LOG, JSON.stringify({ argv, input, cwd: process.cwd(), mcpConfig }) + '\\n');
   }
+  const logFile = argv.indexOf('--log-file');
+  if (logFile >= 0 && process.env.FAKE_AGENT_LOG_TEXT) fs.writeFileSync(argv[logFile + 1], process.env.FAKE_AGENT_LOG_TEXT);
   if (process.env.FAKE_AGENT_PIDFILE) fs.writeFileSync(process.env.FAKE_AGENT_PIDFILE, String(process.pid));
   if (process.env.FAKE_AGENT_MODE === 'sleep') { setTimeout(() => {}, 60000); return; }
   if (process.env.FAKE_AGENT_MODE === 'bridge') { bridge(); return; }

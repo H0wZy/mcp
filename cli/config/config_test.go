@@ -49,7 +49,7 @@ func TestCodexRegisterIntoEmptyConfig(t *testing.T) {
 	want := "[mcp_servers.antigravity]\n" +
 		"command = \"node\"\n" +
 		"args = [\"/srv/agy/cli.js\", \"--host\", \"codex\"]\n" +
-		"env_vars = [\"H0WZY_MCP_RUN_ID\", \"H0WZY_MCP_CHAIN\", \"H0WZY_MCP_DEPTH\", \"H0WZY_MCP_DEADLINE\", \"H0WZY_MCP_STATE_DIR\", \"H0WZY_MCP_MAX_DEPTH\", \"H0WZY_MCP_MAX_CALLS\", \"H0WZY_MCP_ALLOW_REVISIT\", \"H0WZY_MCP_DEADLINE_MINUTES\", \"H0WZY_MCP_CHAIN_LOG\"]\n" +
+		"env_vars = [\"H0WZY_MCP_RUN_ID\", \"H0WZY_MCP_CHAIN\", \"H0WZY_MCP_DEPTH\", \"H0WZY_MCP_DEADLINE\", \"H0WZY_MCP_STATE_DIR\", \"H0WZY_MCP_MAX_DEPTH\", \"H0WZY_MCP_MAX_CALLS\", \"H0WZY_MCP_ALLOW_REVISIT\", \"H0WZY_MCP_DEADLINE_MINUTES\", \"H0WZY_MCP_CHAIN_LOG\", \"H0WZY_MCP_USER_SERVERS\"]\n" +
 		"tool_timeout_sec = 3900\n" +
 		"startup_timeout_sec = 60\n"
 	if got != want {

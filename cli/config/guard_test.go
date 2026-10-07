@@ -54,3 +54,27 @@ func TestLoadGuardPolicyOverridesClampAndInvalid(t *testing.T) {
 		t.Fatalf("policy = %+v", p)
 	}
 }
+
+func TestLoadGuardPolicyUserServers(t *testing.T) {
+	p := LoadGuardPolicy(envOf(nil))
+	if p.UserServers || !strings.Contains(p.NestedServers(), "only the mesh bridges") {
+		t.Fatalf("default: %+v / %q", p, p.NestedServers())
+	}
+
+	p = LoadGuardPolicy(envOf(map[string]string{"H0WZY_MCP_USER_SERVERS": "1"}))
+	if !p.UserServers || len(p.Overrides) != 1 || p.Overrides[0].Invalid || p.Overrides[0].Describe() != "H0WZY_MCP_USER_SERVERS=1" {
+		t.Fatalf("set: %+v", p)
+	}
+	if !strings.Contains(p.NestedServers(), "and your own MCP servers") {
+		t.Fatalf("NestedServers() = %q", p.NestedServers())
+	}
+
+	// The bridges accept exactly "1".
+	p = LoadGuardPolicy(envOf(map[string]string{"H0WZY_MCP_USER_SERVERS": "true"}))
+	if p.UserServers || !p.Overrides[0].Invalid {
+		t.Fatalf("true: %+v", p)
+	}
+	if got, want := p.Overrides[0].Describe(), "H0WZY_MCP_USER_SERVERS=true is not 1: nested agents load only the mesh bridges"; got != want {
+		t.Fatalf("Describe() = %q, want %q", got, want)
+	}
+}

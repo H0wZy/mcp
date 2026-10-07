@@ -29,6 +29,7 @@ var CodexChainEnvVars = []string{
 	"H0WZY_MCP_ALLOW_REVISIT",
 	"H0WZY_MCP_DEADLINE_MINUTES",
 	"H0WZY_MCP_CHAIN_LOG",
+	"H0WZY_MCP_USER_SERVERS",
 }
 
 // CodexTeamEnvVars are the team limits (spec 007) the team server reads. The

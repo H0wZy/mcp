@@ -31,6 +31,7 @@ Part of the **[H0wZy/mcp](https://github.com/H0wZy/mcp)** multi-agent ecosystem.
 - **Isolation**: editing teammates in a git repository work in their own worktree under `~/.h0wzy-mcp/teams/…/worktrees/` by default. The lead reviews each change set with `team_changes`. Editing **Antigravity** teammates always get a worktree, because agy has no edit-only mode.
 - **Blocked tasks** wait: a teammate that reports `blocked` isn't restarted until someone messages it or the lead reopens the task.
 - **Loop guard**: every turn is a spec-006 hop, so a teammate's own bridge calls are limited. Teammates can't create teams.
+- **Lean turns**: Claude Code and Codex teammates load only the H0wZy/mcp bridges, not your other MCP servers (`H0WZY_MCP_USER_SERVERS=1` keeps them). Antigravity always loads all of its servers and waits for each one to connect; when a turn hits its time limit because a server never connected, the `failed` event names that server.
 - **State** lives in `~/.h0wzy-mcp/teams/<project>/<team>/` (`H0WZY_MCP_STATE_DIR` changes the root). It survives the lead's session, and `team_status` reloads it.
 
 ## 🛡️ Limits (developer ceilings)
