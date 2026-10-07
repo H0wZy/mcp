@@ -26,7 +26,7 @@ var stdinIsTerminal = func() bool {
 }
 
 var installCmd = &cobra.Command{
-	Use:   "install [bridge-name]",
+	Use:   "install [bridge-name | team]",
 	Short: "Install and register MCP bridges into host agent configs",
 	Long: `Install bridges between AI developer CLIs. A bridge "host-target" lets the
 host agent call the target agent. Supported bridge names:
@@ -36,11 +36,14 @@ host agent call the target agent. Supported bridge names:
   codex-claude        (OpenAI Codex → Claude Code)
   antigravity-codex   (Google Antigravity → OpenAI Codex)
   antigravity-claude  (Google Antigravity → Claude Code)
+  team                (the agent team server and the agent-team skill, in every
+                       detected CLI: /agent-team in Claude Code and Antigravity,
+                       $agent-team in Codex)
 
 Bridges in both directions form cycles (claude → codex → claude). The loop guard
 limits every chain (depth 2, 8 calls, no revisits by default). With --all, hmcp asks
 before installing bridges that form cycles; without a terminal it skips them unless
---allow-cycles is given.`,
+--allow-cycles is given. --all also installs the team.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		out := cmd.OutOrStdout()
 		if installAll {
@@ -48,6 +51,9 @@ before installing bridges that form cycles; without a terminal it skips them unl
 		}
 		if len(args) == 0 {
 			return fmt.Errorf("please specify a bridge name or use --all (run 'hmcp' for interactive mode)")
+		}
+		if args[0] == config.AgentTeam {
+			return runInstallTeam(out, detectedAgents(), installScope)
 		}
 		return runInstallOne(out, args[0], installScope)
 	},
@@ -126,14 +132,62 @@ func bridgeEdges(bridges []config.Bridge) []config.BridgeEdge {
 	return edges
 }
 
-// runInstallAll implements `install --all`.
+// teamHosts returns, in install order, the detected agents that can run the team server.
+func teamHosts(agents map[string]bool) []string {
+	var hosts []string
+	for _, h := range config.TeamHosts {
+		if agents[h] {
+			hosts = append(hosts, h)
+		}
+	}
+	return hosts
+}
+
+// runInstallAll implements `install --all`: every supported bridge direction
+// (cycle-aware), then the agent team in every detected host.
 func runInstallAll(out io.Writer, in io.Reader, agents map[string]bool, scope string, allowCycles, interactive bool) error {
 	supported := supportedBridges(agents)
-	if len(supported) == 0 {
-		fmt.Fprintln(out, warnStyle.Render("⚠️  No supported bridges detected to install."))
+	hosts := teamHosts(agents)
+	if len(supported) == 0 && len(hosts) == 0 {
+		fmt.Fprintln(out, warnStyle.Render("⚠️  No supported CLIs detected: install Claude Code, OpenAI Codex or Google Antigravity first."))
 		return nil
 	}
 
+	var skipped []string
+	if len(supported) > 0 {
+		var err error
+		if skipped, err = installAllBridges(out, in, supported, scope, allowCycles, interactive); err != nil {
+			return err
+		}
+	}
+	if len(hosts) > 0 {
+		if len(supported) > 0 {
+			fmt.Fprintln(out)
+		}
+		if err := installTeam(out, hosts, scope); err != nil {
+			return err
+		}
+	}
+
+	if len(skipped) > 0 {
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, warnStyle.Render("⏭  Skipped because they would close a cycle:"))
+		for _, name := range skipped {
+			fmt.Fprintf(out, "  • %s\n", agentStyle.Render(name))
+		}
+		fmt.Fprintln(out, dimStyle.Render("   Install them with 'hmcp install --all --allow-cycles' or 'hmcp install <bridge>'."))
+	}
+
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, successStyle.Render("✅ Configuration complete!"))
+	fmt.Fprintln(out, dimStyle.Render("💡 Restart your host agent CLI to activate the newly connected tools."))
+	return nil
+}
+
+// installAllBridges installs the supported directions, asking (or refusing,
+// without a terminal) before the ones that close a cycle. It returns the
+// directions it skipped.
+func installAllBridges(out io.Writer, in io.Reader, supported []config.Bridge, scope string, allowCycles, interactive bool) ([]string, error) {
 	installed, readErr := config.InstalledBridges()
 	if readErr != nil {
 		fmt.Fprintln(out, warnStyle.Render("⚠️  Some host configs could not be read; the cycle check only sees the others:"))
@@ -169,23 +223,61 @@ func runInstallAll(out io.Writer, in io.Reader, agents map[string]bool, scope st
 
 	for _, name := range toInstall {
 		if err := config.InstallBridge(name, scope); err != nil {
-			return fmt.Errorf("%s: %w", name, err)
+			return skipped, fmt.Errorf("%s: %w", name, err)
 		}
 		printConnected(out, name, scope)
 	}
+	return skipped, nil
+}
 
-	if len(skipped) > 0 {
-		fmt.Fprintln(out)
-		fmt.Fprintln(out, warnStyle.Render("⏭  Skipped because they would close a cycle:"))
-		for _, name := range skipped {
-			fmt.Fprintf(out, "  • %s\n", agentStyle.Render(name))
-		}
-		fmt.Fprintln(out, dimStyle.Render("   Install them with 'hmcp install --all --allow-cycles' or 'hmcp install <bridge>'."))
+// runInstallTeam implements `install team`: the team server and the
+// agent-team skill in every detected host.
+func runInstallTeam(out io.Writer, agents map[string]bool, scope string) error {
+	hosts := teamHosts(agents)
+	if len(hosts) == 0 {
+		fmt.Fprintln(out, warnStyle.Render("⚠️  No supported CLIs detected: install Claude Code, OpenAI Codex or Google Antigravity first."))
+		return nil
 	}
-
+	if err := installTeam(out, hosts, scope); err != nil {
+		return err
+	}
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, successStyle.Render("✅ Configuration complete!"))
-	fmt.Fprintln(out, dimStyle.Render("💡 Restart your host agent CLI to activate the newly connected tools."))
+	fmt.Fprintln(out, dimStyle.Render("💡 Restart your host agent CLI to load the team server and the agent-team skill."))
+	return nil
+}
+
+// installTeam installs the team for each host and prints one line per host,
+// plus the skill copies it had to leave alone. It stops at the first host
+// whose config can't be written.
+func installTeam(out io.Writer, hosts []string, scope string) error {
+	fmt.Fprintln(out, headingStyle.Render("👥 Agent team"))
+	for _, host := range hosts {
+		change, err := config.InstallTeam(host, scope)
+		written := 0
+		for _, s := range change.Skills {
+			if s.Action != "skipped" {
+				written++
+			}
+		}
+		switch {
+		case err != nil && len(change.Skills) == 0:
+			return fmt.Errorf("team (%s): %w", host, err)
+		case written > 0:
+			fmt.Fprintf(out, "  %s %s: team server + skill %s\n", successStyle.Render("✓"),
+				agentStyle.Render(config.AgentDisplayName(host)), dimStyle.Render("("+config.SkillTrigger(host)+")"))
+		default:
+			fmt.Fprintf(out, "  %s %s: team server only\n", warnStyle.Render("⚠"), agentStyle.Render(config.AgentDisplayName(host)))
+		}
+		for _, s := range change.Skills {
+			if s.Action == "skipped" {
+				fmt.Fprintf(out, "    %s\n", warnStyle.Render("skipped: "+s.Reason))
+			}
+		}
+		if err != nil {
+			return fmt.Errorf("team (%s): %w", host, err)
+		}
+	}
 	return nil
 }
 
@@ -193,7 +285,7 @@ func runInstallAll(out io.Writer, in io.Reader, agents map[string]bool, scope st
 func runInstallOne(out io.Writer, name, scope string) error {
 	b, ok := config.LookupBridge(name)
 	if !ok {
-		return fmt.Errorf("unknown bridge: %s (valid: %s)", name, strings.Join(config.BridgeNames(), ", "))
+		return fmt.Errorf("unknown bridge: %s (valid: %s, team)", name, strings.Join(config.BridgeNames(), ", "))
 	}
 	if err := config.InstallBridge(name, scope); err != nil {
 		return err

@@ -31,6 +31,22 @@ var CodexChainEnvVars = []string{
 	"H0WZY_MCP_CHAIN_LOG",
 }
 
+// CodexTeamEnvVars are the team limits (spec 007) the team server reads. The
+// Codex team entry forwards them on top of CodexChainEnvVars.
+var CodexTeamEnvVars = []string{
+	"H0WZY_TEAM_MAX_TEAMMATES",
+	"H0WZY_TEAM_MAX_TURNS",
+	"H0WZY_TEAM_MAX_TOTAL_TURNS",
+	"H0WZY_TEAM_DEADLINE_MINUTES",
+	"H0WZY_TEAM_TURN_MINUTES",
+	"H0WZY_TEAM_RESULT_CAP",
+}
+
+// codexTeamEnvVars is the env_vars allow-list of the Codex team entry.
+func codexTeamEnvVars() []string {
+	return append(append([]string(nil), CodexChainEnvVars...), CodexTeamEnvVars...)
+}
+
 const (
 	// CodexToolTimeoutSec covers the longest delegation (60 min) plus margin (research D7).
 	CodexToolTimeoutSec = 3900
@@ -53,6 +69,10 @@ func tomlStringArray(values []string) string {
 // [mcp_servers.<name>] section is replaced: sub-tables such as
 // [mcp_servers.<name>.env] and every other setting are kept.
 func RegisterCodexServerCommand(name, command string, args []string) error {
+	return registerCodexServer(name, command, args, CodexChainEnvVars)
+}
+
+func registerCodexServer(name, command string, args, envVars []string) error {
 	cfgPath, err := getCodexConfigPath()
 	if err != nil {
 		return err
@@ -72,7 +92,7 @@ func RegisterCodexServerCommand(name, command string, args []string) error {
 	}
 	table := "mcp_servers." + name
 	newBlock := fmt.Sprintf("[%s]\ncommand = %q\nargs = %s\nenv_vars = %s\ntool_timeout_sec = %d\nstartup_timeout_sec = %d\n",
-		table, command, tomlStringArray(slashed), tomlStringArray(CodexChainEnvVars),
+		table, command, tomlStringArray(slashed), tomlStringArray(envVars),
 		CodexToolTimeoutSec, CodexStartupTimeoutSec)
 
 	return writeFileAtomic(cfgPath, []byte(upsertTOMLSection(content, table, newBlock)), 0600)

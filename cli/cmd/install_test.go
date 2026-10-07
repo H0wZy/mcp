@@ -25,18 +25,39 @@ func withHome(t *testing.T) string {
 
 var allAgents = map[string]bool{config.AgentClaude: true, config.AgentCodex: true, config.AgentAntigravity: true}
 
+// installedNames lists the installed bridge directions, without team servers.
 func installedNames(t *testing.T) []string {
+	t.Helper()
+	var names []string
+	for _, e := range installedEdges(t) {
+		if e.Target != config.AgentTeam {
+			names = append(names, e.Host+"-"+e.Target)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// teamServerHosts lists the hosts that have the team server registered.
+func teamServerHosts(t *testing.T) []string {
+	t.Helper()
+	var hosts []string
+	for _, e := range installedEdges(t) {
+		if e.Target == config.AgentTeam {
+			hosts = append(hosts, e.Host)
+		}
+	}
+	sort.Strings(hosts)
+	return hosts
+}
+
+func installedEdges(t *testing.T) []config.BridgeEdge {
 	t.Helper()
 	edges, err := config.InstalledBridges()
 	if err != nil {
 		t.Fatalf("InstalledBridges: %v", err)
 	}
-	var names []string
-	for _, e := range edges {
-		names = append(names, e.Host+"-"+e.Target)
-	}
-	sort.Strings(names)
-	return names
+	return edges
 }
 
 func TestPlanInstallSkipsCycleClosingDirections(t *testing.T) {
@@ -178,13 +199,30 @@ func TestInstallAllWithTwoAgentsAndWithOne(t *testing.T) {
 	if got := strings.Join(installedNames(t), ","); got != "claude-codex" {
 		t.Fatalf("installed = %s, want claude-codex", got)
 	}
+	if got := strings.Join(teamServerHosts(t), ","); got != "claude,codex" {
+		t.Fatalf("team installed in %s, want claude,codex", got)
+	}
+}
 
-	out.Reset()
-	if err := runInstallAll(&out, strings.NewReader(""), map[string]bool{config.AgentClaude: true}, "user", false, true); err != nil {
+func TestInstallAllWithOneAgentInstallsOnlyTheTeam(t *testing.T) {
+	withHome(t)
+	var out bytes.Buffer
+	if err := runInstallAll(&out, strings.NewReader(""), map[string]bool{config.AgentCodex: true}, "user", false, true); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "No supported bridges") {
-		t.Fatalf("one agent alone has nothing to install:\n%s", out.String())
+	if len(installedNames(t)) != 0 || strings.Join(teamServerHosts(t), ",") != "codex" {
+		t.Fatalf("bridges = %v team = %v, want no bridge and the team in codex", installedNames(t), teamServerHosts(t))
+	}
+	if strings.Contains(out.String(), "[y/N]") || !strings.Contains(out.String(), "OpenAI Codex: team server + skill ($agent-team)") {
+		t.Fatalf("unexpected output:\n%s", out.String())
+	}
+
+	out.Reset()
+	if err := runInstallAll(&out, strings.NewReader(""), map[string]bool{}, "user", false, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "No supported CLIs detected") {
+		t.Fatalf("no CLI means nothing to install:\n%s", out.String())
 	}
 }
 

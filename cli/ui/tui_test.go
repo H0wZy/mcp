@@ -57,13 +57,22 @@ func TestBridgeOptionsCoverEveryDirection(t *testing.T) {
 		}
 		got = append(got, o.Value)
 	}
-	want := "claude-antigravity claude-codex codex-antigravity codex-claude antigravity-codex antigravity-claude"
+	want := "claude-antigravity claude-codex codex-antigravity codex-claude antigravity-codex antigravity-claude team"
 	if strings.Join(got, " ") != want {
 		t.Fatalf("options = %v, want %s", got, want)
 	}
 
 	two := bridgeOptionsFor(map[string]bool{"codex": true, "antigravity": true})
-	if len(two) != 2 || two[0].Value != "codex-antigravity" || two[1].Value != "antigravity-codex" {
+	if len(two) != 3 || two[0].Value != "codex-antigravity" || two[1].Value != "antigravity-codex" || two[2].Value != "team" {
 		t.Fatalf("codex + antigravity options = %+v", two)
+	}
+
+	// One CLI alone has no bridge to offer, but it can still run the team.
+	one := bridgeOptionsFor(map[string]bool{"claude": true})
+	if len(one) != 1 || one[0].Value != "team" {
+		t.Fatalf("claude-only options = %+v", one)
+	}
+	if none := bridgeOptionsFor(map[string]bool{}); len(none) != 0 {
+		t.Fatalf("no CLI must offer nothing, got %+v", none)
 	}
 }

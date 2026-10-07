@@ -112,16 +112,17 @@ func RunInteractive() error {
 	fmt.Println()
 
 	// 2. Build available bridge options
-	bridgeOptions := bridgeOptionsFor(map[string]bool{
+	installedAgents := map[string]bool{
 		config.AgentClaude:      detectedMap["claude"].Installed,
 		config.AgentCodex:       detectedMap["codex"].Installed,
 		config.AgentAntigravity: detectedMap["agy"].Installed,
-	})
+	}
+	bridgeOptions := bridgeOptionsFor(installedAgents)
 
 	if len(bridgeOptions) == 0 {
 		warnStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFA500"))
-		fmt.Println(warnStyle.Render("⚠️  No pairs of supported CLIs found on this machine to interconnect."))
-		fmt.Println(dimStyle.Render("   Install at least two of: Claude Code, OpenAI Codex, or Google Antigravity."))
+		fmt.Println(warnStyle.Render("⚠️  No supported CLIs found on this machine."))
+		fmt.Println(dimStyle.Render("   Install at least one of: Claude Code, OpenAI Codex, or Google Antigravity."))
 		return nil
 	}
 
@@ -171,6 +172,27 @@ func RunInteractive() error {
 
 	failed := false
 	for _, name := range selectedBridges {
+		if name == config.AgentTeam {
+			for _, host := range config.TeamHosts {
+				if !installedAgents[host] {
+					continue
+				}
+				change, err := config.InstallTeam(host, selectedScope)
+				if err != nil {
+					failed = true
+					fmt.Printf("  %s Failed to install the team in %s: %v\n", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#EF4444")).Render("✗"), config.AgentDisplayName(host), err)
+					continue
+				}
+				fmt.Printf("  %s %s: team server + skill %s\n", successStyle.Render("✓"),
+					lipgloss.NewStyle().Bold(true).Render(config.AgentDisplayName(host)), dimStyle.Render("("+config.SkillTrigger(host)+")"))
+				for _, s := range change.Skills {
+					if s.Action == "skipped" {
+						fmt.Println("    " + dimStyle.Render("skipped: "+s.Reason))
+					}
+				}
+			}
+			continue
+		}
 		b, _ := config.LookupBridge(name)
 		if err := config.InstallBridge(name, selectedScope); err != nil {
 			failed = true
@@ -218,12 +240,18 @@ var bridgeOptionLabels = map[string]string{
 }
 
 // bridgeOptionsFor lists, in install order, the directions whose host and
-// target agents are both installed.
+// target agents are both installed, then the agent team when any agent is.
 func bridgeOptionsFor(installed map[string]bool) []huh.Option[string] {
 	var options []huh.Option[string]
 	for _, b := range config.Bridges {
 		if installed[b.Host] && installed[b.Target] {
 			options = append(options, huh.NewOption(bridgeOptionLabels[b.Name], b.Name))
+		}
+	}
+	for _, h := range config.TeamHosts {
+		if installed[h] {
+			options = append(options, huh.NewOption("Agent team server + agent-team skill (every detected CLI)", config.AgentTeam))
+			break
 		}
 	}
 	return options

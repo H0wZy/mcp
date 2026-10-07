@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -29,6 +30,11 @@ var doctorCmd = &cobra.Command{
 		}
 
 		graph := inspectBridges(os.Getenv)
+		detected := make(map[string]bool)
+		for _, t := range tools {
+			detected[agentForTool(t.Name)] = t.Installed
+		}
+		team := config.TeamStatus(doctorTeamHosts(detected, graph.Bridges), graph.Bridges)
 
 		if doctorJsonFlag {
 			report := doctorReport{
@@ -36,6 +42,7 @@ var doctorCmd = &cobra.Command{
 				Bridges:  graph.Bridges,
 				Cycles:   graph.closedCycles(),
 				Guard:    graph.Guard,
+				Team:     team,
 				Warnings: graph.Warnings,
 			}
 			data, err := json.MarshalIndent(report, "", "  ")
@@ -108,6 +115,7 @@ var doctorCmd = &cobra.Command{
 
 		fmt.Println()
 		renderBridgeGraph(cmd.OutOrStdout(), graph)
+		renderTeam(cmd.OutOrStdout(), team)
 		return nil
 	},
 }
@@ -118,7 +126,84 @@ type doctorReport struct {
 	Bridges  []config.BridgeEdge          `json:"bridges"`
 	Cycles   [][]string                   `json:"cycles"`
 	Guard    config.GuardPolicy           `json:"guard"`
+	Team     []config.TeamHostStatus      `json:"team"`
 	Warnings []string                     `json:"warnings,omitempty"`
+}
+
+// doctorTeamHosts lists, in install order, the hosts doctor reports the team
+// for: every detected CLI, plus any host that has a team server registered.
+func doctorTeamHosts(detected map[string]bool, edges []config.BridgeEdge) []string {
+	var hosts []string
+	for _, h := range config.TeamHosts {
+		include := detected[h]
+		for _, e := range edges {
+			if e.Host == h && e.Target == config.AgentTeam {
+				include = true
+			}
+		}
+		if include {
+			hosts = append(hosts, h)
+		}
+	}
+	return hosts
+}
+
+func renderTeam(out io.Writer, team []config.TeamHostStatus) {
+	fmt.Fprintln(out, headingStyle.Render("👥 Agent team"))
+	if len(team) == 0 {
+		fmt.Fprintf(out, "  %s\n", dimStyle.Render("no supported CLI detected"))
+		return
+	}
+	for _, s := range team {
+		server := successStyle.Render("server ✓")
+		if !s.Server {
+			server = warnStyle.Render("server ✗ (run hmcp install team)")
+		}
+		var lines []string
+		present := false
+		for _, c := range s.Skills {
+			if c.State != config.SkillMissing {
+				present = true
+			}
+		}
+		if !present {
+			lines = []string{warnStyle.Render("skill ✗ missing (run hmcp install team)")}
+		} else {
+			for _, c := range s.Skills {
+				lines = append(lines, skillCopyLine(c))
+			}
+		}
+		prefix := fmt.Sprintf("  %s: ", s.Host)
+		fmt.Fprintf(out, "%s%s · %s\n", prefix, server, lines[0])
+		for _, l := range lines[1:] {
+			fmt.Fprintf(out, "%s%s\n", strings.Repeat(" ", len(prefix)), l)
+		}
+	}
+}
+
+func skillCopyLine(c config.SkillCopy) string {
+	dir := displayPath(filepath.Dir(c.Path))
+	switch c.State {
+	case config.SkillCurrent:
+		return successStyle.Render("skill ✓") + " " + dir + dimStyle.Render(" (current)")
+	case config.SkillOutdated:
+		return warnStyle.Render("skill ⚠ outdated") + " " + dir
+	case config.SkillForeign:
+		return warnStyle.Render("skill ⚠ foreign") + " " + dir + dimStyle.Render(" (not installed by hmcp, left alone)")
+	case config.SkillMissing:
+		return warnStyle.Render("skill ✗ missing") + " " + dir + dimStyle.Render(" (run hmcp install team)")
+	}
+	return warnStyle.Render("skill ⚠ "+c.State) + " " + dir
+}
+
+// displayPath shortens a path under the home directory to ~/… with forward slashes.
+func displayPath(p string) string {
+	if home, err := os.UserHomeDir(); err == nil {
+		if rel, err := filepath.Rel(home, p); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "~/" + filepath.ToSlash(rel)
+		}
+	}
+	return filepath.ToSlash(p)
 }
 
 // bridgeGraph is what doctor knows about the installed bridges.
@@ -202,6 +287,8 @@ func bridgeNote(e config.BridgeEdge) string {
 		note := "⚠ env_vars missing: chain context only via the ancestry fallback"
 		if b, ok := config.LookupBridge(e.Host + "-" + e.Target); ok {
 			note += " (fix: hmcp install " + b.Name + ")"
+		} else if e.Target == config.AgentTeam {
+			note += " (fix: hmcp install team)"
 		}
 		return warnStyle.Render(note)
 	case e.Host == config.AgentClaude:

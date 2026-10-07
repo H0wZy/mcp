@@ -59,6 +59,29 @@ func renderBridgeList(out io.Writer, installed []config.BridgeEdge, readErr erro
 		fmt.Fprintf(out, "      %s\n", state)
 	}
 
+	// The team server is installed per host rather than per direction.
+	var teamIn []string
+	for _, host := range config.TeamHosts {
+		var scopes []string
+		for _, e := range installed {
+			if e.Host == host && e.Target == config.AgentTeam {
+				scopes = appendUnique(scopes, e.Scope)
+			}
+		}
+		if len(scopes) > 0 {
+			sort.Strings(scopes)
+			teamIn = append(teamIn, host+" ("+strings.Join(scopes, ", ")+")")
+		}
+	}
+	teamState, teamBullet := dimStyle.Render("· not installed"), dimStyle.Render("•")
+	if len(teamIn) > 0 {
+		teamState = successStyle.Render("✓ installed in") + " " + dimStyle.Render(strings.Join(teamIn, ", "))
+		teamBullet = successStyle.Render("•")
+	}
+	fmt.Fprintf(out, "  %s %s %s %s\n", teamBullet, agentStyle.Render(fmt.Sprintf("%-19s", config.AgentTeam)),
+		agentStyle.Render("Agent team server + agent-team skill"), tagStyle.Render("(every detected CLI)"))
+	fmt.Fprintf(out, "      %s\n", teamState)
+
 	if readErr != nil {
 		fmt.Fprintln(out)
 		fmt.Fprintln(out, warnStyle.Render("⚠️  Some host configs could not be read:"))
