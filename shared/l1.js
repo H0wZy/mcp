@@ -5,8 +5,16 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-const BRIDGE_KIND = /@h0wzy\/mcp-server-(codex|antigravity|claude|team)\b|servers[\\/]+(codex|antigravity|claude|team)[\\/]+bin[\\/]+cli\.js/i;
-const SECTION = /^\s*\[\s*mcp_servers\.([A-Za-z0-9_-]+)\s*\]\s*(?:#.*)?$/;
+// `@h0wzy\mcp-server-codex` too: a global npm install on Windows, written by hand.
+const BRIDGE_KIND = /@h0wzy[\\/]+mcp-server-(codex|antigravity|claude|team)(?![\w-])|servers[\\/]+(codex|antigravity|claude|team)[\\/]+bin[\\/]+cli\.js/i;
+// A TOML key: bare, "basic" or 'literal'.
+const KEY = String.raw`(?:"([^"]+)"|'([^']+)'|([A-Za-z0-9_-]+))`;
+const SECTION = new RegExp(String.raw`^\s*\[\s*mcp_servers\s*\.\s*${KEY}\s*\]\s*(?:#.*)?$`);
+const PARENT_SECTION = /^\s*\[\s*mcp_servers\s*\]\s*(?:#.*)?$/;
+// `name = { command = "…", args = [ … ] }` inside [mcp_servers] (inline tables are one line).
+const INLINE_SERVER = new RegExp(String.raw`^\s*${KEY}\s*=\s*\{(.*)$`);
+/** Server names Codex accepts in a `-c mcp_servers.<name>.enabled=false` override. */
+export const CODEX_OVERRIDE_NAME = /^[A-Za-z0-9_-]+$/;
 const ANY_HEADER = /^\s*\[/;
 const COMMENT = /^\s*#/;
 
@@ -39,18 +47,33 @@ export function codexConfigPath(env = process.env) {
  */
 export function listCodexServers(text) {
   const servers = [];
+  const server = (name) => {
+    let found = servers.find((s) => s.name === name);
+    if (!found) {
+      found = { name, kind: null };
+      servers.push(found);
+    }
+    return found;
+  };
   let current = null;
+  let inParent = false;
   for (const line of String(text).split(/\r?\n/)) {
     if (ANY_HEADER.test(line)) {
       const match = line.match(SECTION);
-      current = match ? servers.find((s) => s.name === match[1]) : null;
-      if (match && !current) {
-        current = { name: match[1], kind: null };
-        servers.push(current);
+      current = match ? server(match[1] ?? match[2] ?? match[3]) : null;
+      inParent = PARENT_SECTION.test(line);
+      continue;
+    }
+    if (COMMENT.test(line)) continue;
+    if (inParent) {
+      const inline = line.match(INLINE_SERVER);
+      if (inline) {
+        const entry = server(inline[1] ?? inline[2] ?? inline[3]);
+        entry.kind ||= bridgeKind(inline[4]);
       }
       continue;
     }
-    if (current && !current.kind && !COMMENT.test(line)) current.kind = bridgeKind(line);
+    if (current && !current.kind) current.kind = bridgeKind(line);
   }
   return servers;
 }
@@ -65,6 +88,16 @@ export function findBridgeServers(text) {
   return listCodexServers(text)
     .filter((s) => s.kind)
     .map((s) => s.name);
+}
+
+/**
+ * `-c` overrides that switch off the named Codex MCP servers. Codex splits `-c` keys on
+ * dots, so a name outside [A-Za-z0-9_-] can't be addressed and stays on (the runtime
+ * guard, L2, still applies to bridges).
+ * @param {string[]} names
+ */
+export function codexDisableArgs(names) {
+  return names.filter((name) => CODEX_OVERRIDE_NAME.test(name)).flatMap((name) => ['-c', `mcp_servers.${name}.enabled=false`]);
 }
 
 /**
@@ -97,7 +130,7 @@ export function noBridgeArgs(target, { codexConfig, env = process.env } = {}) {
     if (text === undefined) return [];
     // Only names that already exist: a new mcp_servers table without a command could
     // make Codex reject its config.
-    return findBridgeServers(text).flatMap((name) => ['-c', `mcp_servers.${name}.enabled=false`]);
+    return codexDisableArgs(findBridgeServers(text));
   }
   if (target === 'antigravity') {
     return ['--disable-slash-commands'];

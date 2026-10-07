@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -297,6 +299,30 @@ func TestInstalledBridgesProjectAndLocalScope(t *testing.T) {
 	want := []string{"claude>antigravity:agy:local", "claude>codex:codex:project", "claude>codex:codex:user"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("edges = %v, want %v", got, want)
+	}
+}
+
+func TestInstalledBridgesLocalScopeThroughSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need privileges on Windows")
+	}
+	home := withHome(t)
+	project := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(project, link); err != nil {
+		t.Fatal(err)
+	}
+	// The shell sits in the link; Claude Code keyed the project by its resolved path.
+	t.Chdir(link)
+	real, _ := filepath.EvalSymlinks(project)
+	writeFile(t, filepath.Join(home, ".claude.json"), `{"projects": {"`+filepath.ToSlash(real)+`": {"mcpServers": {"agy": {"command": "npx", "args": ["-y", "@h0wzy/mcp-server-antigravity"]}}}}}`)
+
+	edges, err := InstalledBridges()
+	if err != nil {
+		t.Fatalf("InstalledBridges: %v", err)
+	}
+	if len(edges) != 1 || edges[0].Scope != "local" || edges[0].Target != AgentAntigravity {
+		t.Fatalf("edges = %+v, want the local-scope antigravity bridge", edges)
 	}
 }
 

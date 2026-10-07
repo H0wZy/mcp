@@ -140,9 +140,9 @@ func claudeLocalServers(data map[string]interface{}, cwd string) interface{} {
 	if !ok {
 		return nil
 	}
-	want := normalizeProjectPath(cwd)
+	want := projectPathKeys(cwd)
 	for key, value := range projects {
-		if normalizeProjectPath(key) != want {
+		if !want[normalizeProjectPath(key)] && !anyKey(projectPathKeys(key), want) {
 			continue
 		}
 		if project, ok := value.(map[string]interface{}); ok {
@@ -150,6 +150,25 @@ func claudeLocalServers(data map[string]interface{}, cwd string) interface{} {
 		}
 	}
 	return nil
+}
+
+// projectPathKeys is the path as written and as the OS resolves it (symlinks,
+// /private/var on macOS, 8.3 names on Windows), so either spelling finds the project.
+func projectPathKeys(p string) map[string]bool {
+	keys := map[string]bool{normalizeProjectPath(p): true}
+	if real, err := filepath.EvalSymlinks(p); err == nil {
+		keys[normalizeProjectPath(real)] = true
+	}
+	return keys
+}
+
+func anyKey(keys, want map[string]bool) bool {
+	for k := range keys {
+		if want[k] {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeProjectPath(p string) string {

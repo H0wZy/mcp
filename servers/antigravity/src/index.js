@@ -156,8 +156,11 @@ async function executeAgyPrompt({
   const guarded = autoApprove ? withContext : `${READ_ONLY_NOTICE}\n\n${withContext}`;
   // L3: tell the agent where it sits in the chain (spec 006).
   const fullPrompt = hop ? `${hop.notice}\n\n${guarded}` : guarded;
-  // A child never outlives its chain: cap the run, rounded down to whole minutes.
-  const minutes = hop ? Math.max(1, Math.min(timeoutMinutes, Math.floor(hop.remainingMs() / 60000))) : timeoutMinutes;
+  // A child never outlives its chain: cap the run, rounded down to whole minutes, and
+  // keep agy's grace after --print-timeout inside the deadline.
+  const minutes = hop
+    ? Math.max(1, Math.min(timeoutMinutes, Math.floor((hop.remainingMs() - PRINT_TIMEOUT_GRACE_MS) / 60000)))
+    : timeoutMinutes;
 
   const args = [
     '-p',
@@ -181,7 +184,7 @@ async function executeAgyPrompt({
 
   // A private log explains a run that never started (an MCP server that can't connect).
   const log = createAgyLog();
-  args.push('--log-file', log.file);
+  if (log.file) args.push('--log-file', log.file);
 
   let res;
   let hint = '';

@@ -161,7 +161,9 @@ export const CURATED_CATALOGS = {
 const CLAUDE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 
 // Claude Code model aliases follow new releases on their own; the full ids pin a
-// version. Haiku 4.5 has no effort control, so `--effort` is never sent for it.
+// version. Haiku 5.5 takes effort levels; Haiku 4.5 has none, so `--effort` is never
+// sent for the pinned 4.5 id. (On Bedrock, Vertex and Foundry the `haiku` alias is still
+// Haiku 4.5, and Claude Code falls back for a level the model lacks.)
 CURATED_CATALOGS.claude = [
   {
     id: 'fable',
@@ -189,16 +191,16 @@ CURATED_CATALOGS.claude = [
   },
   {
     id: 'haiku',
-    displayName: 'Claude Haiku (alias, currently Haiku 4.5)',
+    displayName: 'Claude Haiku (alias, currently Haiku 5.5)',
     efforts: CLAUDE_EFFORTS,
-    effortControl: false,
     defaultEffort: 'medium',
     tierNote: 'light',
-    description: 'Fastest and cheapest. No effort control.',
+    description: 'Fastest and cheapest.',
   },
   { id: 'claude-fable-5-1', displayName: 'Claude Fable 5.1', efforts: CLAUDE_EFFORTS, defaultEffort: 'high', tierNote: 'deep', description: 'Pinned Fable 5.1.' },
   { id: 'claude-opus-5-5', displayName: 'Claude Opus 5.5', efforts: CLAUDE_EFFORTS, defaultEffort: 'medium', tierNote: 'balanced', description: 'Pinned Opus 5.5.' },
   { id: 'claude-sonnet-5-5', displayName: 'Claude Sonnet 5.5', efforts: CLAUDE_EFFORTS, defaultEffort: 'medium', tierNote: 'light', description: 'Pinned Sonnet 5.5.' },
+  { id: 'claude-haiku-5-5', displayName: 'Claude Haiku 5.5', efforts: CLAUDE_EFFORTS, defaultEffort: 'medium', tierNote: 'light', description: 'Pinned Haiku 5.5.' },
   {
     id: 'claude-haiku-4-5',
     displayName: 'Claude Haiku 4.5',

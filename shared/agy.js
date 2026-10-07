@@ -6,12 +6,16 @@
 // each run wait until --print-timeout, then exit 0 with an empty answer (verified with
 // agy 1.3.1, spec 006 research §7). These helpers turn that into an actionable error.
 
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { removeTempDir } from './mcp-scope.js';
 
 const PRINT_TIMEOUT = /print timeout after [^\n]* with turn in progress/i;
 const STILL_CONNECTING = /MCP: \d+ server\(s\) still connecting after [^:\r\n]+: ([^\r\n]+)/g;
+// What an MCP server name looks like; anything else in the log line is dropped, so no
+// other log content reaches the caller.
+const SERVER_TOKEN = /^[A-Za-z0-9_.-]{1,64}$/;
 const LOG_TAIL_BYTES = 512 * 1024;
 
 /**
@@ -31,7 +35,7 @@ export function hitPrintTimeout(stderr) {
 export function stuckMcpServers(logText) {
   let names = [];
   for (const match of String(logText ?? '').matchAll(STILL_CONNECTING)) {
-    names = match[1].split(/[,\s]+/).filter(Boolean);
+    names = match[1].split(/[,\s]+/).filter((name) => SERVER_TOKEN.test(name));
   }
   return names;
 }
@@ -52,16 +56,22 @@ export function stuckServersHint(names) {
 }
 
 /**
- * A private --log-file for one agy run, so a stuck run can be explained.
- * @returns {{ file: string, read: () => string, cleanup: () => void }}
+ * A private --log-file for one agy run, so a stuck run can be explained. Without a temp
+ * folder the run goes ahead with no log (`file` is undefined).
+ * @returns {{ file?: string, read: () => string, cleanup: () => void }}
  */
 export function createAgyLog() {
-  const dir = mkdtempSync(join(tmpdir(), 'h0wzy-agy-'));
+  let dir;
+  try {
+    dir = mkdtempSync(join(tmpdir(), 'h0wzy-agy-'));
+  } catch {
+    return { file: undefined, read: () => '', cleanup: () => {} };
+  }
   const file = join(dir, 'agy.log');
   return {
     file,
     read: () => readLogTail(file),
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => removeTempDir(dir),
   };
 }
 

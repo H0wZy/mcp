@@ -11,6 +11,9 @@ import {
   codexMcpArgs,
   userServersAllowed,
 } from '../mcp-scope.js';
+import { bridgeKind, listCodexServers } from '../l1.js';
+import { stuckMcpServers } from '../agy.js';
+import { symlinkSync } from 'node:fs';
 
 const CODEX = `
 [mcp_servers.antigravity]
@@ -120,8 +123,16 @@ test('claudeConfigPath honours CLAUDE_CONFIG_DIR', () => {
 test('claudeMcpArgs: mesh file below the maximum depth, L1 at it, nothing extra on opt-out', () => {
   const config = claudeConfig('/nowhere');
   const below = claudeMcpArgs({ claudeConfig: config, env: {} });
-  assert.deepEqual(below.args.slice(0, 2), ['--strict-mcp-config', '--mcp-config']);
-  const file = below.args[2];
+  // The read-only bridge tools are allowed up front: nobody answers a prompt in -p.
+  assert.deepEqual(below.args.slice(0, 4), [
+    '--allowedTools',
+    'mcp__codex__ask_*,mcp__codex__review_*,mcp__codex__brainstorm_*,mcp__codex__plan_*,' +
+      'mcp__antigravity__ask_*,mcp__antigravity__review_*,mcp__antigravity__brainstorm_*,mcp__antigravity__plan_*',
+    '--strict-mcp-config',
+    '--mcp-config',
+  ]);
+  assert.equal(below.args.length, 5);
+  const file = below.args[4];
   assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), { mcpServers: { codex: CODEX_ENTRY, antigravity: AGY_ENTRY } });
   below.cleanup();
   assert.equal(existsSync(file), false);
@@ -144,9 +155,60 @@ test('claudeMcpArgs reads the user config from CLAUDE_CONFIG_DIR', () => {
     assert.deepEqual(claudeMcpArgs({ env: { CLAUDE_CONFIG_DIR: dir } }).args, ['--strict-mcp-config']);
     writeFileSync(join(dir, '.claude.json'), JSON.stringify({ mcpServers: { codex: CODEX_ENTRY } }));
     const res = claudeMcpArgs({ env: { CLAUDE_CONFIG_DIR: dir } });
-    assert.equal(res.args[1], '--mcp-config');
+    assert.equal(res.args.at(-2), '--mcp-config');
     res.cleanup();
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('bridgeKind: Windows backslash installs count, longer package names do not', () => {
+  assert.equal(bridgeKind('node C:\\Users\\x\\AppData\\Roaming\\npm\\node_modules\\@h0wzy\\mcp-server-codex\\bin\\cli.js'), 'codex');
+  assert.equal(bridgeKind('npx -y @h0wzy/mcp-server-claude@1.0.6'), 'claude');
+  assert.equal(bridgeKind('npx -y @h0wzy/mcp-server-claude-extras'), null);
+});
+
+test('listCodexServers reads quoted table names and inline tables under [mcp_servers]', () => {
+  const text = [
+    '[mcp_servers."quoted"]',
+    'command = "npx"',
+    "[mcp_servers.'lit']",
+    'args = ["@h0wzy/mcp-server-codex"]',
+    '[mcp_servers]',
+    'gh = { command = "npx", args = ["gh-mcp"] }',
+    '"my.server" = { command = "x" }',
+    'cx = { command = "npx", args = ["@h0wzy/mcp-server-codex"] }',
+    '[other]',
+    'nope = { command = "x" }',
+  ].join('\r\n');
+  assert.deepEqual(listCodexServers(text), [
+    { name: 'quoted', kind: null },
+    { name: 'lit', kind: 'codex' },
+    { name: 'gh', kind: null },
+    { name: 'my.server', kind: null },
+    { name: 'cx', kind: 'codex' },
+  ]);
+  // A name with a dot can't be addressed by `-c`; every other non-mesh server goes off.
+  assert.deepEqual(codexMcpArgs({ codexConfig: text, env: {} }), off(['quoted', 'gh']));
+});
+
+test('claudeMeshServers: local scope shadows a user bridge, disabled servers stay off, symlinked cwd matches', { skip: process.platform === 'win32' && 'symlinks need privileges on Windows' }, () => {
+  const project = mkdtempSync(join(tmpdir(), 'hmcp-scope-real-'));
+  const link = `${project}-link`;
+  try {
+    symlinkSync(project, link);
+    const user = { codex: CODEX_ENTRY, antigravity: AGY_ENTRY };
+    // The child runs in the resolved folder, which is the key Claude Code writes.
+    const config = (local) => ({ mcpServers: user, projects: { [project]: local } });
+    assert.deepEqual(claudeMeshServers({ claudeConfig: config({ mcpServers: { codex: { command: 'my-own-codex' } } }), cwd: link }), { antigravity: AGY_ENTRY });
+    assert.deepEqual(claudeMeshServers({ claudeConfig: config({ disabledMcpServers: ['antigravity'] }), cwd: link }), { codex: CODEX_ENTRY });
+  } finally {
+    rmSync(link, { force: true });
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test('stuckMcpServers keeps only server-name tokens from the agy log', () => {
+  const log = 'MCP: 2 server(s) still connecting after 30s: google-flow-remote, a@b.com /etc/passwd\n';
+  assert.deepEqual(stuckMcpServers(log), ['google-flow-remote']);
 });

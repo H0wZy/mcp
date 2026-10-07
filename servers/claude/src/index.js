@@ -124,7 +124,8 @@ async function executeClaude({ prompt, prefix = '', paths, model, effort, cwd, d
   args.push(...capArgs);
   // FR-026: only the mesh bridges, not every MCP server the user configured; none at
   // the maximum depth (L1).
-  const mcp = claudeMcpArgs({ atMaxDepth: hop?.atMaxDepth, cwd: workDir });
+  // Without a cwd the child runs in this server's folder, so that is the local scope.
+  const mcp = claudeMcpArgs({ atMaxDepth: hop?.atMaxDepth, cwd: workDir ?? process.cwd() });
   args.push(...mcp.args);
 
   const minutes = delegate ? timeoutMinutes : READ_ONLY_TIMEOUT_MINUTES;
@@ -183,7 +184,7 @@ const MODEL_SCHEMA = {
 const EFFORT_SCHEMA = {
   type: 'string',
   enum: EFFORTS,
-  description: 'Optional reasoning effort override ("low"|"medium"|"high"|"xhigh"|"max"). Ignored for Haiku.',
+  description: 'Optional reasoning effort override ("low"|"medium"|"high"|"xhigh"|"max"). Ignored for the pinned Haiku 4.5 id.',
 };
 
 function readOnlyTool({ name, description, promptDescription, prefix }) {

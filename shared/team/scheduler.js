@@ -128,13 +128,20 @@ export async function runTurnProcess({ team, member, prompt, signal, minutes }) 
   const scratch = (ext) => join(team.store.resultsDir, `.${member.agent}-${member.name}-${member.turns}.${ext}`);
   const outputFile = member.agent === 'codex' ? scratch('txt') : undefined;
   const logFile = member.agent === 'antigravity' ? scratch('log') : undefined;
-  const turn = buildTurn({ member, prompt: `${hop.notice}\n\n${prompt}`, hop, outputFile, logFile, minutes, env: team.env });
+  // agy needs ~25 s around --print-timeout to start and to return its partial output:
+  // leave it that grace inside the team's deadline.
+  const graceMs = member.agent === 'antigravity' ? 60000 : 0;
+  if (graceMs) minutes = Math.max(1, Math.min(minutes, Math.floor((hop.remainingMs() - graceMs) / 60000)));
+  let turn;
+  try {
+    turn = buildTurn({ member, prompt: `${hop.notice}\n\n${prompt}`, hop, outputFile, logFile, minutes, env: team.env, projectDir: team.data?.cwd });
+  } catch (err) {
+    turn = { ok: false, error: err?.message || String(err) };
+  }
   if (!turn.ok) {
     hop.finish('failed');
     return { ok: false, error: turn.error, text: '' };
   }
-  // agy needs ~25 s around --print-timeout to start and to return its partial output.
-  const graceMs = member.agent === 'antigravity' ? 60000 : 0;
   let res;
   let parsed;
   try {
@@ -148,9 +155,18 @@ export async function runTurnProcess({ team, member, prompt, signal, minutes }) 
       onSpawn: (child) => hop.registerAgent(child.pid),
     });
     parsed = parseTurn(member.agent, res, { outputFile, logFile, sessionId: turn.sessionId });
+  } catch (err) {
+    hop.finish('failed');
+    throw err;
   } finally {
     turn.cleanup();
-    for (const file of [outputFile, logFile]) if (file) rmSync(file, { force: true });
+    for (const file of [outputFile, logFile]) {
+      try {
+        if (file) rmSync(file, { force: true, maxRetries: 3, retryDelay: 100 });
+      } catch {
+        /* a file still held on Windows; the team folder keeps it */
+      }
+    }
   }
   const timedOut = res.timedOut || (member.agent === 'antigravity' && !parsed.ok && hitPrintTimeout(res.stderr));
   hop.finish(res.cancelled ? 'cancelled' : parsed.ok ? 'ran' : timedOut ? 'timed-out' : 'failed');
@@ -649,7 +665,8 @@ export class Team {
     } else {
       member.state = 'failed';
     }
-    member.lastError = String(error).slice(0, 500);
+    // Provider stderr and agy log hints end up here: redact before storing or emitting.
+    member.lastError = sanitizeOutput(String(error)).slice(0, 500);
     let tail = '';
     if (task && task.status === 'in_progress' && task.assignee === member.name) {
       task.status = 'pending';

@@ -137,6 +137,7 @@ Format: `[ID] [P?] [Story] Description`. `[P]` means it can run in parallel (dif
 - [x] T032 `parseClaudeResult` reports the JSON `errors`; drop `CLAUDE_CODE_SESSION_ATTENDED` from the nested env.
 - [x] T033 Go: add `H0WZY_MCP_USER_SERVERS` to the Codex `env_vars` allow-list; `hmcp doctor` shows which servers nested agents load and flags an invalid value.
 - [x] T034 Re-run on the real CLIs: `ask_claude`, `ask_codex`, `delegate_claude`, `delegate_codex`, a 2-hop chain `ask_claude → ask_codex`, and `delegate_antigravity` against a stuck MCP server (research §7).
+- [x] T035 Fix the review of 1ec3792: Windows backslash and exact package names in `bridgeKind`; quoted and inline Codex servers; realpath, shadowing and `disabledMcpServers` in the local-scope lookup (Node and `hmcp doctor`); local scope for worktree teammates and calls without `cwd`; `--allowedTools` for read-only bridge tools; cleanup that never throws; no `--log-file` when no temp folder; agy grace kept inside the deadline; `hop.finish` when a team turn throws; agy server names and team errors sanitized; tests never run a real agent CLI (default fakes in `guard-env.js`, empty PATH in the Go detector test).
 
 ---
 

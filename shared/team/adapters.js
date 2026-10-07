@@ -44,10 +44,11 @@ const INSTALL_HINTS = {
  * @param {string} [options.outputFile] Codex writes its last message here
  * @param {string} [options.logFile] agy writes its log here (explains a stuck turn)
  * @param {number} [options.minutes] Turn limit, for agy's --print-timeout
+ * @param {string} [options.projectDir] The team's project folder, for Claude Code's local-scope MCP servers
  * @param {NodeJS.ProcessEnv} [options.env]
  * @returns {{ ok: true, command: string, args: string[], input?: string, cwd: string, env: object, sessionId: string|null, warnings: string[], cleanup: () => void } | { ok: false, error: string }}
  */
-export function buildTurn({ member, prompt, hop = null, outputFile, logFile, minutes = 20, env = process.env }) {
+export function buildTurn({ member, prompt, hop = null, outputFile, logFile, minutes = 20, env = process.env, projectDir }) {
   const [bin, override] = BINARIES[member.agent] || [];
   if (!bin) return { ok: false, error: `Unknown agent '${member.agent}'. Use one of: ${TEAM_AGENTS.join(', ')}.` };
   const command = resolveBinary(bin, override);
@@ -72,7 +73,8 @@ export function buildTurn({ member, prompt, hop = null, outputFile, logFile, min
       args.push('--session-id', sessionId);
     }
     // FR-026 (spec 006): only the mesh bridges; none at the maximum depth.
-    const mcp = claudeMcpArgs({ atMaxDepth, cwd: member.workDir, env });
+    // Local scope belongs to the project, not to the teammate's worktree under ~/.h0wzy-mcp.
+    const mcp = claudeMcpArgs({ atMaxDepth, cwd: projectDir || member.workDir, env });
     args.push(...caps, ...mcp.args);
     return { ok: true, command, args, input: prompt, cwd: member.workDir, env: claudeChildEnv(chainEnv), sessionId, warnings, cleanup: mcp.cleanup };
   }

@@ -46,6 +46,7 @@ test('claude turns get the mesh bridges from the user config, and cleanup remove
     const turn = buildTurn({ member: { ...base, agent: 'claude', canEdit: false }, prompt: 'P', hop });
     const at = turn.args.indexOf('--mcp-config');
     assert.equal(turn.args[at - 1], '--strict-mcp-config');
+    assert.equal(at + 2, turn.args.length, '--mcp-config file is the last argument');
     const file = turn.args[at + 1];
     assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), { mcpServers: { codex: entry } });
     turn.cleanup();
@@ -157,4 +158,20 @@ test('fitArgv keeps the head and tail of a prompt that is too long for a command
   assert.ok(cut.startsWith('H'.repeat(500)));
   assert.ok(cut.endsWith('T'.repeat(500)));
   assert.match(cut, /characters cut to fit the command line/);
+});
+
+test('a claude teammate in a worktree gets the local-scope bridges of the team project', () => {
+  const project = mkdtempSync(join(tmpdir(), 'hmcp-adapters-project-'));
+  const local = { command: 'npx', args: ['-y', '@h0wzy/mcp-server-codex', '--host', 'claude'] };
+  writeFileSync(join(dir, '.claude.json'), JSON.stringify({ projects: { [project]: { mcpServers: { codex: local } } } }));
+  try {
+    // workDir is the teammate's worktree, which is never a key in ~/.claude.json.
+    const turn = buildTurn({ member: { ...base, agent: 'claude', canEdit: true }, prompt: 'P', hop, projectDir: project });
+    const file = turn.args[turn.args.indexOf('--mcp-config') + 1];
+    assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), { mcpServers: { codex: local } });
+    turn.cleanup();
+  } finally {
+    rmSync(join(dir, '.claude.json'), { force: true });
+    rmSync(project, { recursive: true, force: true });
+  }
 });

@@ -344,12 +344,16 @@ test('delegate_claude edits inside cwd with acceptEdits and denied prompts', asy
   }
 });
 
-test('haiku gets no --effort flag and the footer says effort=n/a', async () => {
-  const result = await withLog(claudeFake, () => callTool(claude, 'ask_claude', { prompt: 'quick', model: 'haiku', effort: 'high' }));
-  const { argv } = lastCall(claudeFake);
+test('the haiku alias (Haiku 5.5) gets --effort; pinned Haiku 4.5 does not', async () => {
+  let result = await withLog(claudeFake, () => callTool(claude, 'ask_claude', { prompt: 'quick', model: 'haiku', effort: 'high' }));
+  let { argv } = lastCall(claudeFake);
+  assert.deepEqual(argv.slice(argv.indexOf('--model'), argv.indexOf('--model') + 4), ['--model', 'haiku', '--effort', 'high']);
+  assert.match(result.content[0].text, /\[claude · model=haiku · effort=high · source=override\]/);
+
+  result = await withLog(claudeFake, () => callTool(claude, 'ask_claude', { prompt: 'quick', model: 'claude-haiku-4-5', effort: 'high' }));
+  ({ argv } = lastCall(claudeFake));
   assert.equal(argv.includes('--effort'), false, argv.join(' '));
-  assert.deepEqual(argv.slice(argv.indexOf('--model'), argv.indexOf('--model') + 2), ['--model', 'haiku']);
-  assert.match(result.content[0].text, /\[claude · model=haiku · effort=n\/a · source=override\]/);
+  assert.match(result.content[0].text, /\[claude · model=claude-haiku-4-5 · effort=n\/a · source=override\]/);
 });
 
 test('at the maximum depth every target starts without bridge tools (L1)', async () => {
@@ -447,12 +451,16 @@ test('a nested Codex starts the mesh bridges but none of the user\'s other MCP s
   });
 });
 
+const READ_ONLY_MESH = (...names) => names.flatMap((n) => ['ask', 'review', 'brainstorm', 'plan'].map((t) => `mcp__${n}__${t}_*`)).join(',');
+
 test('a nested Claude Code gets only the mesh bridges through a temporary --mcp-config', async () => {
   await withAgentConfigs(async () => {
     await withLog(claudeFake, () => callTool(claude, 'ask_claude', { prompt: 'x' }));
     let call = lastCall(claudeFake);
     const at = call.argv.indexOf('--mcp-config');
-    assert.deepEqual(call.argv.slice(at - 1, at + 1), ['--strict-mcp-config', '--mcp-config']);
+    assert.deepEqual(call.argv.slice(at - 3, at + 1), ['--allowedTools', READ_ONLY_MESH('codex', 'antigravity'), '--strict-mcp-config', '--mcp-config']);
+    // --mcp-config takes several values: its file must be the last argument.
+    assert.equal(at + 2, call.argv.length);
     assert.deepEqual(call.mcpConfig, { mcpServers: { codex: USER_CODEX, antigravity: USER_AGY } });
     assert.equal(existsSync(call.argv[at + 1]), false, 'the --mcp-config file is removed after the call');
 

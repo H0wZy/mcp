@@ -4,15 +4,17 @@
 // `claude -p` call (claude.ai connectors) and doubled Codex start-up time. Developers
 // who want their own servers in nested agents set H0WZY_MCP_USER_SERVERS=1.
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { bridgeKind, listCodexServers, noBridgeArgs, readCodexConfig } from './l1.js';
+import { bridgeKind, codexDisableArgs, listCodexServers, noBridgeArgs, readCodexConfig } from './l1.js';
 
 /** Bridges a nested agent keeps below the maximum depth. Nested teams are refused anyway. */
 export const MESH_KINDS = ['codex', 'antigravity', 'claude'];
 
 const SERVER_NAME = /^[A-Za-z0-9_-]+$/;
+/** Bridge tools that never edit files: a nested Claude may call them without a prompt. */
+const READ_ONLY_BRIDGE_TOOLS = ['ask', 'review', 'brainstorm', 'plan'];
 const noop = () => {};
 
 /**
@@ -37,9 +39,11 @@ export function codexMcpArgs({ atMaxDepth = false, env = process.env, codexConfi
   const keepUser = userServersAllowed(env);
   // Only tables that exist: a new mcp_servers table without a command could make
   // Codex reject its config.
-  return listCodexServers(text)
-    .filter(({ kind }) => (kind ? atMaxDepth || !MESH_KINDS.includes(kind) : !keepUser))
-    .flatMap(({ name }) => ['-c', `mcp_servers.${name}.enabled=false`]);
+  return codexDisableArgs(
+    listCodexServers(text)
+      .filter(({ kind }) => (kind ? atMaxDepth || !MESH_KINDS.includes(kind) : !keepUser))
+      .map(({ name }) => name),
+  );
 }
 
 /**
@@ -54,6 +58,26 @@ export function claudeConfigPath(env = process.env) {
 function projectKey(path) {
   const key = resolve(path).replace(/\\/g, '/').replace(/\/+$/, '');
   return process.platform === 'win32' ? key.toLowerCase() : key;
+}
+
+/** The path as given and as the OS resolves it (symlinks, /private/var, 8.3 names). */
+function projectKeys(path) {
+  const keys = new Set([projectKey(path)]);
+  try {
+    keys.add(projectKey(realpathSync.native(path)));
+  } catch {
+    /* gone or unreadable: the literal key still counts */
+  }
+  return keys;
+}
+
+/** The local-scope entry of ~/.claude.json for `cwd`, if any. */
+function localProject(projects, cwd) {
+  if (!cwd || !projects || typeof projects !== 'object') return undefined;
+  const wanted = projectKeys(cwd);
+  const entries = Object.entries(projects);
+  const hit = entries.find(([path]) => wanted.has(projectKey(path))) || entries.find(([path]) => [...projectKeys(path)].some((k) => wanted.has(k)));
+  return hit?.[1];
 }
 
 /**
@@ -74,24 +98,35 @@ export function claudeMeshServers({ cwd, env = process.env, claudeConfig } = {})
       return {};
     }
   }
+  // Local scope wins over user scope for the same name, as in Claude Code, even when the
+  // local server is not a bridge; servers disabled for the project stay off.
+  const project = localProject(data?.projects, cwd);
+  const merged = { ...asObject(data?.mcpServers), ...asObject(project?.mcpServers) };
+  const disabled = new Set(Array.isArray(project?.disabledMcpServers) ? project.disabledMcpServers : []);
   const servers = {};
-  const add = (entries) => {
-    if (!entries || typeof entries !== 'object') return;
-    for (const [name, entry] of Object.entries(entries)) {
-      if (!SERVER_NAME.test(name) || !entry || typeof entry !== 'object') continue;
-      const commandLine = [entry.command, ...(Array.isArray(entry.args) ? entry.args : [])].join(' ');
-      if (MESH_KINDS.includes(bridgeKind(commandLine))) servers[name] = entry;
-    }
-  };
-  add(data?.mcpServers);
-  // Local scope wins over user scope for the same name, as in Claude Code.
-  if (cwd && data?.projects && typeof data.projects === 'object') {
-    const wanted = projectKey(cwd);
-    for (const [path, project] of Object.entries(data.projects)) {
-      if (projectKey(path) === wanted) add(project?.mcpServers);
-    }
+  for (const [name, entry] of Object.entries(merged)) {
+    if (!SERVER_NAME.test(name) || disabled.has(name) || !entry || typeof entry !== 'object') continue;
+    const commandLine = [entry.command, ...(Array.isArray(entry.args) ? entry.args : [])].join(' ');
+    if (MESH_KINDS.includes(bridgeKind(commandLine))) servers[name] = entry;
   }
   return servers;
+}
+
+function asObject(value) {
+  return value && typeof value === 'object' ? value : {};
+}
+
+/**
+ * Removes a temporary folder without ever throwing: on Windows a process that is still
+ * shutting down (or an antivirus scan) can hold a file for a moment.
+ * @param {string} dir
+ */
+export function removeTempDir(dir) {
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  } catch {
+    /* best effort; the OS temp cleanup gets the rest */
+  }
 }
 
 /**
@@ -113,13 +148,18 @@ export function claudeMcpArgs({ atMaxDepth = false, cwd, env = process.env, clau
     dir = mkdtempSync(join(tmpdir(), 'h0wzy-mcp-'));
     const file = join(dir, 'mcp.json');
     writeFileSync(file, JSON.stringify({ mcpServers: servers }), { mode: 0o600 });
+    // Nobody can answer a permission prompt in a nested run (--permission-prompts none),
+    // so the read-only bridge tools are allowed up front; delegate_* and configure_*
+    // still need the user's own allow rules.
+    const allowed = Object.keys(servers).flatMap((name) => READ_ONLY_BRIDGE_TOOLS.map((tool) => `mcp__${name}__${tool}_*`));
     return {
-      args: ['--strict-mcp-config', '--mcp-config', file],
-      cleanup: () => rmSync(dir, { recursive: true, force: true }),
+      // --mcp-config takes several values: it stays last so nothing after it is swallowed.
+      args: ['--allowedTools', allowed.join(','), '--strict-mcp-config', '--mcp-config', file],
+      cleanup: () => removeTempDir(dir),
     };
   } catch {
     // No room for the file: run without the mesh rather than fail the call.
-    if (dir) rmSync(dir, { recursive: true, force: true });
+    if (dir) removeTempDir(dir);
     return { args: ['--strict-mcp-config'], cleanup: noop };
   }
 }

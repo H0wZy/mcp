@@ -6,6 +6,11 @@ import (
 )
 
 func TestDetectTools(t *testing.T) {
+	// Never run the developer's real agent CLIs: an empty home and PATH.
+	empty := t.TempDir()
+	for _, key := range []string{"HOME", "USERPROFILE", "PATH", "APPDATA", "LOCALAPPDATA"} {
+		t.Setenv(key, empty)
+	}
 	tools := DetectTools()
 	if len(tools) == 0 {
 		t.Fatal("Expected tools to be detected")
