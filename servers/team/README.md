@@ -15,7 +15,7 @@ Part of the **[H0wZy/mcp](https://github.com/H0wZy/mcp)** multi-agent ecosystem.
 | :--- | :--- |
 | `team_create` | Create a team (or resume a saved one) with optional lower limits |
 | `team_spawn` | Start a teammate in the background: `agent` (`claude` \| `codex` \| `antigravity`), `role`, `tier` / `model` / `effort`, `can_edit`, `isolation`, `owns`, `task` or `task_id` |
-| `task_create` / `task_update` / `task_list` | The shared task list: dependencies (`depends_on`), assignees, optional completion `check` (argv, no shell) |
+| `task_create` / `task_update` / `task_list` | The shared task list: dependencies (`depends_on`), assignees, optional completion `check` (argv, no shell; needs `H0WZY_TEAM_ALLOW_CHECKS=1` because it runs without asking) |
 | `team_wait` | Long-poll: returns every new event (finished, failed, task completed, message to the lead, limit hit) as soon as one happens |
 | `team_status` | Everything in one call: members, turns, cost, unread messages, task list |
 | `team_message` | Message a teammate; an idle teammate wakes for one turn |
@@ -28,7 +28,8 @@ Part of the **[H0wZy/mcp](https://github.com/H0wZy/mcp)** multi-agent ecosystem.
 - **Each teammate turn** is one run of the vendor CLI: `claude -p`, `codex exec` or `agy -p`. It uses the vendor's read-only flags unless the teammate was spawned with `can_edit: true`.
 - **Context between turns**: Claude Code teammates resume their session, Antigravity continues its conversation, and Codex gets a compact history of its earlier turns.
 - **End-of-turn report**: every turn ends with a `team-report` block (status, summary, messages, `claim_next`). The orchestrator owns the task statuses, so a task is never left "in progress" with no one working on it.
-- **Isolation**: editing teammates in a git repository work in their own worktree under `~/.h0wzy-mcp/teams/…/worktrees/` by default. The lead reviews each change set with `team_changes`.
+- **Isolation**: editing teammates in a git repository work in their own worktree under `~/.h0wzy-mcp/teams/…/worktrees/` by default. The lead reviews each change set with `team_changes`. Editing **Antigravity** teammates always get a worktree, because agy has no edit-only mode.
+- **Blocked tasks** wait: a teammate that reports `blocked` isn't restarted until someone messages it or the lead reopens the task.
 - **Loop guard**: every turn is a spec-006 hop, so a teammate's own bridge calls are limited. Teammates can't create teams.
 - **State** lives in `~/.h0wzy-mcp/teams/<project>/<team>/` (`H0WZY_MCP_STATE_DIR` changes the root). It survives the lead's session, and `team_status` reloads it.
 

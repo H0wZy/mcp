@@ -38,12 +38,20 @@ function isNested() {
   return resolveChain({ env: process.env, host }).kind !== 'new';
 }
 
-function getTeam(name) {
+function getTeam(name, cwd) {
   const wanted = name || currentTeam;
   if (!wanted) throw new Error('No team yet. Call team_create first.');
   let team = teams.get(wanted);
   if (!team) {
-    team = Team.load({ cwd: process.cwd(), name: wanted });
+    // A saved team: the given folder, this server's folder, or wherever it was created.
+    if (cwd) team = Team.load({ cwd: validateCwd(cwd), name: wanted });
+    else {
+      try {
+        team = Team.load({ cwd: process.cwd(), name: wanted });
+      } catch {
+        team = Team.find({ name: wanted });
+      }
+    }
     teams.set(wanted, team);
   }
   currentTeam = wanted;
@@ -144,7 +152,7 @@ export const teamSpawnTool = tool(
     tier: { type: 'string', enum: ['light', 'balanced', 'deep'], description: 'Model/effort preset for that agent (spec 005).' },
     model: { type: 'string', description: 'Optional model override for that agent.' },
     effort: { type: 'string', enum: [...EFFORTS, 'ultra'], description: 'Optional effort override.' },
-    can_edit: { type: 'boolean', description: 'Allow file edits (default false).' },
+    can_edit: { type: 'boolean', description: 'Allow file edits (default false). Editing Antigravity teammates always use a worktree (agy has no edit-only mode).' },
     isolation: { type: 'string', enum: ['worktree', 'none'], description: 'For editing teammates: own git worktree (default in a git repo) or the shared project folder.' },
     owns: { type: 'array', items: { type: 'string' }, description: 'Files or folders (from the repo root) this teammate may change; others are flagged.' },
     task: { type: 'string', description: 'Initial task text (creates a task assigned to this teammate).' },
@@ -184,7 +192,8 @@ export const teamSpawnTool = tool(
 export const taskCreateTool = tool(
   'task_create',
   'Add tasks to the team task list. A task with depends_on starts only after those tasks complete; cycles are refused. ' +
-    'Optional `check` is a command (argv array, no shell, e.g. ["npm","test"]) that must pass before "done" counts.',
+    'Optional `check` is a command (argv array, no shell, e.g. ["npm","test"]) that must pass before "done" counts; ' +
+    'it runs without asking, so it only works when the developer set H0WZY_TEAM_ALLOW_CHECKS=1.',
   {
     team: TEAM_PROP,
     tasks: {
@@ -244,9 +253,9 @@ export const teamStatusTool = tool(
   'team_status',
   'Full picture in one call: each teammate (state, agent/model, task, turns, cost, unread messages), team limits and the task list. ' +
     'Prefer team_wait to follow progress; use this when you need everything at once. Also loads a saved team by name.',
-  { team: TEAM_PROP },
+  { team: TEAM_PROP, cwd: { type: 'string', description: 'Project folder of a saved team, if two saved teams share its name.' } },
   [],
-  ({ team: name }) => ok(getTeam(name).status()),
+  ({ team: name, cwd }) => ok(getTeam(name, cwd).status()),
   { readOnlyHint: true, openWorldHint: false }
 );
 

@@ -16,10 +16,10 @@ Server name `team`, version 1.0.6. Launch: `node servers/team/bin/cli.js --host 
 |---|---|---|
 | `team_create` | `name`, `cwd?` (absolute; default: server cwd), `limits?` {`max_teammates`, `max_turns_per_teammate`, `max_total_turns`, `deadline_minutes`, `result_cap_chars`}, `self_claim?` (default true) | Team summary with the effective limits. A lead value above the developer ceiling is lowered, with a note. |
 | `team_spawn` | `name`, `agent` (`claude`\|`codex`\|`antigravity`), `role`, `tier?`, `model?`, `effort?`, `can_edit?` (false), `isolation?` (`worktree`\|`none`; default `worktree` when `can_edit` in a git repo), `owns?` (string[]), `task?` (text: creates a task assigned to this member), `task_id?` (assign an existing task), `max_turns?` | Within 3 s: `Spawned <name> (<agent>, <model>/<effort>, read-only\|edits in <path>) — working on T3` or `— idle, waiting for a task`. Refused when the team is full or the name is taken. |
-| `task_create` | `tasks`: [{`id?`, `title`, `description?`, `assignee?`, `depends_on?`: [ids], `check?`: [argv]}] | Created ids. Refused, with nothing created, on unknown dependencies, duplicate ids or a cycle (the cycle is named). |
+| `task_create` | `tasks`: [{`id?`, `title`, `description?`, `assignee?`, `depends_on?`: [ids], `check?`: [argv]}] | Created ids. Refused, with nothing created, on unknown dependencies, duplicate ids, a cycle (the cycle is named), or a `check` while the developer hasn't set `H0WZY_TEAM_ALLOW_CHECKS=1` (checks run a command without asking). |
 | `task_update` | `id`, `status?` (`pending`\|`cancelled`\|`completed`\|`failed`), `assignee?`, `description?`, `note?` | The updated task. The lead's override; reassigning a running task takes effect after the current turn. |
 | `task_list` | none | One compact line per task: `T3 [in_progress] @reviewer "Review auth" ← T1,T2`. |
-| `team_status` | none | Members (state, agent/model/effort, current task, turns used/max, cost and tokens when known, unread messages), team totals vs limits, the task list, and a reminder of which tasks teammates own. |
+| `team_status` | `cwd?` (to pick a saved team when two share its name) | Members (state, agent/model/effort, current task, turns used/max, cost and tokens when known, unread messages), team totals vs limits, the task list, and a reminder of which tasks teammates own. |
 | `team_wait` | `timeout_seconds?` (default 300, 1–1800) | Every event not yet read by the lead, oldest first. If there are none, it waits for the next event or the timeout. On timeout: `No events in <n>s.` plus a one-line status. |
 | `team_message` | `to` (member name), `text` | `Queued for <to>`. Wakes an idle member for one turn, if its budget allows. Unknown names fail with the list of valid names. |
 | `team_result` | `ref` (e.g. `reviewer#2`), `offset?` (0), `limit?` (20,000) | A page of the full saved output, with `offset`/`total` so the lead can read the next page. |
@@ -36,6 +36,7 @@ One line each, with its type first:
 [failed] coder: Codex quota exhausted (429) · T3 released to pending
 [task] T4 completed by coder · T5, T6 now available
 [message] tester → lead: "Need the API keys path"
+[message] coder tried to message unknown member(s) ghost (valid: lead, coder, tester); not delivered
 [limit] coder reached max_turns_per_teammate (10) · T3 left in_progress → unreported
 [unreported] architect ended turn 2 without a team-report block · T1 marked unreported
 [check] T3 check failed (exit 1) · sent back to coder
@@ -52,5 +53,9 @@ One line each, with its type first:
 | `H0WZY_TEAM_DEADLINE_MINUTES` | 60 | 240 |
 | `H0WZY_TEAM_TURN_MINUTES` | 20 | 60 |
 | `H0WZY_TEAM_RESULT_CAP` | 8000 | 50000 |
+
+Editing Antigravity teammates must use `isolation: "worktree"` in a git repository, because agy has no edit-only permission mode and runs with every check off. A spawn that can't satisfy this is refused.
+
+`H0WZY_TEAM_ALLOW_CHECKS=1` turns on completion checks (off by default).
 
 Per-teammate spending caps for Claude Code reuse `CLAUDE_BRIDGE_MAX_BUDGET_USD` / `CLAUDE_BRIDGE_MAX_TURNS`. Model and effort settings for each vendor are validated with that vendor's spec-005 catalog and ceilings (`AGY_*`, `CODEX_*`, `CLAUDE_BRIDGE_*`).

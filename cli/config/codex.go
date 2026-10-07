@@ -40,6 +40,7 @@ var CodexTeamEnvVars = []string{
 	"H0WZY_TEAM_DEADLINE_MINUTES",
 	"H0WZY_TEAM_TURN_MINUTES",
 	"H0WZY_TEAM_RESULT_CAP",
+	"H0WZY_TEAM_ALLOW_CHECKS",
 }
 
 // codexTeamEnvVars is the env_vars allow-list of the Codex team entry.

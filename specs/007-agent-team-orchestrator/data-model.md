@@ -33,7 +33,8 @@ State dir: `<H0WZY_MCP_STATE_DIR or ~/.h0wzy-mcp>/teams/<project-key>/<team>/`. 
 | `currentTask` | task id \| null | |
 | `sessionId` | string \| null | Claude session uuid, or Antigravity conversation id |
 | `history` | [{turn, task, status, summary}] | The last 10 entries, used for Codex carry-over |
-| `mailbox` | [{from, text, at}] | Undelivered messages |
+| `mailbox` | [{from, text, at}] | Undelivered messages. Mail wakes an idle member |
+| `notes` | [{from, text, at}] | Notices for the next turn (e.g. a bounced message). Notes don't wake the member |
 | `usage` | {costUsd, inputTokens, outputTokens} | Summed when the agent reports them |
 | `lastError` | string \| null | |
 
@@ -51,9 +52,10 @@ State transitions:
 | `id` | `T<n>` or a lead-chosen id `^[A-Za-z0-9_-]{1,32}$` | unique |
 | `title` | string ≤ 200 | |
 | `description` | string ≤ 8,000 | |
-| `status` | `pending` \| `in_progress` \| `completed` \| `failed` \| `cancelled` \| `unreported` | |
+| `status` | `pending` \| `in_progress` \| `blocked` \| `completed` \| `failed` \| `cancelled` \| `unreported` | `blocked` resumes on a message to its assignee or a lead `task_update` |
 | `assignee` | member name \| null | |
 | `dependsOn` | ids | All must exist. A cycle is refused |
+| `chain` (on Team) | {runId, agents: ["team"], depth: 0, deadline} | The team's spec-006 root chain. Every turn is a hop of it, and teammates' bridges share its call budget |
 | `check` | argv string[] \| null | |
 | `result` | {summary, ref} \| null | |
 | `note` | string \| null | Reason for failed, blocked or unreported |

@@ -186,8 +186,9 @@ test('messages between teammates arrive next turn and wake an idle teammate; unk
     const events = team.takeEvents().map((e) => e.text);
     assert.ok(events.some((t) => t === '[message] rev → lead: "FYI"'));
     const rev = team.member('rev');
-    assert.equal(rev.turns, 2, 'the bounce woke rev for one more turn');
-    assert.match(log.filter((l) => l.member === 'rev')[1].prompt, /not delivered: no such member\. Valid names: lead, dev, rev/);
+    assert.equal(rev.turns, 1, 'a bounce must not wake the sender');
+    assert.ok(events.some((t) => /^\[message\] rev tried to message unknown member\(s\) ghost \(valid: lead, dev, rev\)/.test(t)), events.join('\n'));
+    assert.match(rev.notes[0].text, /not delivered: no such member/);
     assert.throws(() => team.message('nobody', 'x'), /Valid names: dev, rev/);
   } finally {
     cleanup();
@@ -241,8 +242,19 @@ test('a failed turn releases its task; no report marks the task unreported', asy
   }
 });
 
+test('completion checks are off unless the developer allows them', () => {
+  const { team, cleanup } = setup();
+  try {
+    assert.throws(() => team.createTasks([{ title: 't', check: ['npm', 'test'] }]), /H0WZY_TEAM_ALLOW_CHECKS=1/);
+    assert.equal(team.tasks.length, 0);
+  } finally {
+    cleanup();
+  }
+});
+
 test('a completion check sends the task back until it passes', async () => {
   const { team, cleanup } = setup({
+    env: { H0WZY_TEAM_ALLOW_CHECKS: '1' },
     runner: scriptedRunner({ a: [{ status: 'done', summary: 'v1' }, { status: 'done', summary: 'v2' }] }),
   });
   try {
@@ -311,6 +323,82 @@ test('a saved team can be loaded again; turns that were running become unreporte
     again.store.releaseOwner();
     team.abortAll();
     await team.idle();
+  } finally {
+    cleanup();
+  }
+});
+
+test('a blocked task waits for new input instead of looping its teammate', async () => {
+  const log = [];
+  const { team, cleanup } = setup({
+    runner: scriptedRunner(
+      { a: [{ status: 'blocked', summary: 'need the API key path', messages: [{ to: 'lead', text: 'where is the key?' }] }, { status: 'done', summary: 'used it' }] },
+      log
+    ),
+  });
+  try {
+    team.spawn({ name: 'a', agent: 'codex', role: 'r', settings: SETTINGS, task: 'call the API' });
+    await team.idle();
+    assert.equal(team.member('a').turns, 1, 'no turn may start without new input');
+    assert.equal(team.task('T1').status, 'blocked');
+    team.message('a', 'the key is in .env.local');
+    await team.idle();
+    assert.equal(team.member('a').turns, 2);
+    assert.equal(team.task('T1').status, 'completed');
+    assert.match(log[1].prompt, /## Your task: T1/);
+    assert.match(log[1].prompt, /from lead: "the key is in \.env\.local"/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('a refused spawn leaves no trace, and editing Antigravity teammates need a worktree', () => {
+  const { team, cleanup } = setup();
+  try {
+    assert.throws(() => team.spawn({ name: 'x', agent: 'codex', role: 'r', settings: SETTINGS, task: '   ' }), /must not be empty/);
+    assert.throws(() => team.spawn({ name: 'x', agent: 'codex', role: 'r', settings: SETTINGS, taskId: 'T9' }), /No task 'T9'/);
+    assert.equal(team.data.members.length, 0);
+    // The temp project is not a git repository.
+    assert.throws(
+      () => team.spawn({ name: 'g', agent: 'antigravity', role: 'r', settings: SETTINGS, canEdit: true }),
+      /must work in its own git worktree .* not a git repository/
+    );
+    assert.equal(team.data.members.length, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+test('team turns are hops of one team chain', async () => {
+  const seen = [];
+  const { team, cleanup } = setup({
+    runner: async ({ team: t, member }) => {
+      seen.push(t.chain().runId);
+      return { ok: true, text: report({ status: 'done', task: member.currentTask, summary: 's' }) };
+    },
+  });
+  try {
+    team.createTasks([{ title: 'a' }, { title: 'b' }]);
+    team.spawn({ name: 'x', agent: 'codex', role: 'r', settings: SETTINGS });
+    team.spawn({ name: 'y', agent: 'claude', role: 'r', settings: SETTINGS });
+    await team.idle();
+    assert.equal(seen.length, 2);
+    assert.equal(new Set(seen).size, 1);
+    assert.equal(team.data.chain.deadline, team.data.deadline);
+    assert.deepEqual(team.data.chain.agents, ['team']);
+  } finally {
+    cleanup();
+  }
+});
+
+test('a saved team is found by name from any folder', () => {
+  const { team, env, cleanup } = setup();
+  try {
+    team.store.releaseOwner();
+    const found = Team.find({ name: 'alpha', env });
+    assert.equal(found.data.cwd, team.data.cwd);
+    assert.throws(() => Team.find({ name: 'nope', env }), /No team named 'nope'/);
+    found.store.releaseOwner();
   } finally {
     cleanup();
   }

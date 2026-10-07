@@ -18,13 +18,13 @@ You are the **lead**. Teammates are other coding agents that the `team` MCP serv
 ## Steps
 
 1. **Create the team.** `team_create` with a short `name`. Lower the limits for small jobs, for example `{"max_teammates": 2, "max_total_turns": 8}`.
-2. **Write the tasks.** `task_create` takes small, checkable tasks with `depends_on` where order matters. Aim for 3–6 tasks per teammate. Add `check` (an argv array, e.g. `["npm","test"]`) when "done" must mean "tests pass".
+2. **Write the tasks.** `task_create` takes small, checkable tasks with `depends_on` where order matters. Aim for 3–6 tasks per teammate. Add `check` (an argv array, e.g. `["npm","test"]`) when "done" must mean "tests pass". This only works if the developer turned checks on (`H0WZY_TEAM_ALLOW_CHECKS=1`).
 3. **Spawn the teammates.** `team_spawn` takes `name`, `agent`, `role`, a tier, and a `task` or `task_id`. The call returns at once while the teammate works in the background.
    - Choose the tier by role: `light` for scouting and summaries, `balanced` for routine work, `deep` for security, architecture and hard bugs.
    - Only implementers get `can_edit: true`. Each one works in its own git worktree unless you pass `isolation: "none"`. Give two editors different files (`owns`).
    - Mix vendors: a reviewer from another model family catches different bugs.
 4. **Wait, don't poll.** Call `team_wait` (default 5 min). It returns as soon as anything happens: a teammate finished, failed, messaged you, a task completed or a limit was hit. Call it again until the work is done. Use `team_status` only when you need the full picture.
-5. **Steer.** Use `team_message` to answer questions, redirect a teammate or pass findings between teammates. Use `task_update` to reassign, cancel or reopen.
+5. **Steer.** Use `team_message` to answer questions, redirect a teammate or pass findings between teammates. A teammate that reported `blocked` waits until you message it or reopen its task. Use `task_update` to reassign, cancel or reopen.
 6. **Collect.** Results arrive as compact summaries with a `ref`. Read the full output with `team_result` only when you need it. For editing teammates in worktrees, `team_changes` shows their change set. Review it and apply what you accept.
 7. **Finish.** `team_shutdown`, then give the user a short synthesis: what each teammate found or changed, what you accepted, and what is still open.
 

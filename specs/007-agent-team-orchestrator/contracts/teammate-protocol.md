@@ -50,7 +50,7 @@ Without a task (woken only by messages), the task section reads `## No task assi
 |---|---|
 | `done` | `completed`. With a `check`, it first runs the check; if that fails, the task stays `in_progress` and the output goes to the member |
 | `failed` | `failed` (reason = summary) |
-| `blocked` | `pending`, still assigned to the member, `note` = summary |
+| `blocked` | `blocked`, still assigned to the member, `note` = summary. It starts again only when the member gets a message (it then resumes on this task) or the lead reopens it with `task_update` |
 | `continue` | stays `in_progress`; another turn is scheduled if the budget allows |
 | missing / invalid | `unreported` |
 | turn crashed / timed out | task back to `pending` (released), member `failed` |

@@ -1,7 +1,7 @@
 // H0wZy/mcp — Team task list (spec 007): dependencies, availability and claims.
 // Pure functions over a plain array, so the scheduler stays the only writer.
 
-export const TASK_STATUSES = ['pending', 'in_progress', 'completed', 'failed', 'cancelled', 'unreported'];
+export const TASK_STATUSES = ['pending', 'in_progress', 'blocked', 'completed', 'failed', 'cancelled', 'unreported'];
 const TASK_ID = /^[A-Za-z0-9_-]{1,32}$/;
 const MAX_TITLE = 200;
 const MAX_DESCRIPTION = 8000;

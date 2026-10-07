@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readdirSync, writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { beginHop, loadPolicy, readEnvChain, formatTrace, agentName, logRefusal } from '../chain-guard.js';
+import { beginHop, loadPolicy, readEnvChain, formatTrace, agentName, logRefusal, createRootChain } from '../chain-guard.js';
 
 function freshDir() {
   return mkdtempSync(join(tmpdir(), 'hmcp-guard-'));
@@ -256,4 +256,49 @@ test('the chain log records hops and refusals without prompt text', () => {
 
 test('formatTrace tolerates unknown values', () => {
   assert.equal(formatTrace({}), '[chain ? · depth ?/? · calls ?/? · run ?]');
+});
+
+test('a call that never started an agent gives its budget slot back', () => {
+  const dir = freshDir();
+  try {
+    const env = envFor(dir, { H0WZY_MCP_MAX_CALLS: '2' });
+    const first = beginHop({ target: 'codex', host: 'claude', env, ancestors: noAncestors }).hop;
+    first.registerAgent(1234);
+    first.finish('ran');
+    // Two nested calls that fail before spawning (bad cwd, missing binary, …).
+    for (let i = 0; i < 2; i++) {
+      const failed = beginHop({ target: 'antigravity', env: nestedEnv(first), ancestors: noAncestors });
+      assert.equal(failed.ok, true);
+      failed.hop.finish('failed');
+    }
+    const real = beginHop({ target: 'antigravity', env: nestedEnv(first), ancestors: noAncestors });
+    assert.equal(real.ok, true, 'the failed attempts must not have used the budget');
+    assert.equal(real.hop.slot, 2);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a root chain (team) shares its deadline and nested budget across all its hops', () => {
+  const dir = freshDir();
+  try {
+    const env = envFor(dir, { H0WZY_MCP_MAX_CALLS: '2' });
+    const deadline = Date.now() + 5 * 60000;
+    const root = createRootChain({ env, agents: ['team'], deadline });
+    // Team turns: hops of the root chain that don't spend its call budget.
+    const turns = [1, 2, 3].map(() => beginHop({ target: 'codex', env, chain: root, claim: false }));
+    assert.ok(turns.every((t) => t.ok));
+    assert.equal(turns[0].hop.childEnv.H0WZY_MCP_RUN_ID, root.runId);
+    assert.equal(turns[0].hop.childEnv.H0WZY_MCP_CHAIN, 'team>codex');
+    assert.equal(turns[0].hop.deadline, deadline);
+    // Bridges called by teammates share one budget for the whole team.
+    const a = beginHop({ target: 'claude', env: nestedEnv(turns[0].hop), ancestors: noAncestors });
+    const b = beginHop({ target: 'claude', env: nestedEnv(turns[1].hop), ancestors: noAncestors });
+    const c = beginHop({ target: 'claude', env: nestedEnv(turns[2].hop), ancestors: noAncestors });
+    assert.equal(a.ok && b.ok, true);
+    assert.equal(c.ok, false);
+    assert.equal(c.refusal.rule, 'budget');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

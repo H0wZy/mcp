@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { buildTurn, parseTurn } from '../team/adapters.js';
+import { buildTurn, parseTurn, fitArgv } from '../team/adapters.js';
 
 // resolveBinary accepts an override path only when it is an executable file.
 const dir = mkdtempSync(join(tmpdir(), 'hmcp-adapters-'));
@@ -84,4 +84,14 @@ test('parseTurn reads each vendor format', () => {
   assert.equal(parseTurn('codex', { ...ok, stdout: 'stdout answer' }, { outputFile: join(dir, 'missing') }).text, 'stdout answer');
   assert.equal(parseTurn('codex', { ...ok, ok: false, exitCode: 2, stdout: '', stderr: 'boom' }).error, 'boom');
   assert.equal(parseTurn('claude', { ...ok, timedOut: true, ok: false, stdout: '' }).error, 'the turn timed out');
+});
+
+test('fitArgv keeps the head and tail of a prompt that is too long for a command line', () => {
+  assert.equal(fitArgv('short', 100), 'short');
+  const long = 'H'.repeat(500) + 'M'.repeat(5000) + 'T'.repeat(500);
+  const cut = fitArgv(long, 2000);
+  assert.ok(cut.length <= 2000, String(cut.length));
+  assert.ok(cut.startsWith('H'.repeat(500)));
+  assert.ok(cut.endsWith('T'.repeat(500)));
+  assert.match(cut, /characters cut to fit the command line/);
 });

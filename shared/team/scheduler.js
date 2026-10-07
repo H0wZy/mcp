@@ -6,7 +6,7 @@ import { existsSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { executeProcess } from '../executor.js';
 import { resolveBinary } from '../resolver.js';
-import { beginHop } from '../chain-guard.js';
+import { beginHop, createRootChain } from '../chain-guard.js';
 import { sanitizeOutput } from '../errors.js';
 import { TeamStore, NAME_PATTERN } from './store.js';
 import { addTasks, nextTaskFor, claim, unblockedBy, formatTask, TASK_STATUSES } from './tasks.js';
@@ -119,7 +119,9 @@ async function git(args, cwd) {
  * Runs one teammate turn for real: a spec-006 hop, the vendor CLI, and the parsed answer.
  */
 export async function runTurnProcess({ team, member, prompt, signal, minutes }) {
-  const decision = beginHop({ target: member.agent, host: 'team', tool: 'team_turn', env: team.env });
+  // Every turn is a hop of the team's own chain (FR-018): one deadline for the whole
+  // team, and one call budget shared by every bridge its teammates use.
+  const decision = beginHop({ target: member.agent, host: 'team', tool: 'team_turn', env: team.env, chain: team.chain(), claim: false });
   if (!decision.ok) return { ok: false, error: decision.refusal.text.split('\n')[0], text: '' };
   const hop = decision.hop;
   const outputFile = member.agent === 'codex' ? join(team.store.resultsDir, `.codex-${member.name}-${member.turns}.txt`) : undefined;
@@ -176,6 +178,15 @@ export class Team {
     return this.data.name;
   }
 
+  /** The team's spec-006 chain; teams saved by an older version get one now. */
+  chain() {
+    if (!this.data.chain) {
+      this.data.chain = createRootChain({ env: this.env, agents: ['team'], deadline: this.data.deadline });
+      this.save();
+    }
+    return this.data.chain;
+  }
+
   /**
    * Creates a team, or takes over a saved one with the same name.
    */
@@ -205,6 +216,7 @@ export class Team {
       members: [],
       limitsHit: [],
     };
+    data.chain = createRootChain({ env, agents: ['team'], deadline: data.deadline });
     const team = new Team({ store, data, tasks: [], env, runner });
     team.save();
     return { team, resumed: false, notes: [...ceilings.notes, ...notes] };
@@ -236,6 +248,20 @@ export class Team {
     }
     team.save();
     return team;
+  }
+
+  /**
+   * Loads a saved team by name from whichever project folder it was created for.
+   * @returns {Team}
+   * @throws when no team or more than one team has that name
+   */
+  static find({ name, env = process.env, runner }) {
+    const matches = TeamStore.findByName(name, env);
+    if (!matches.length) throw new Error(`No team named '${name}'. Create it with team_create.`);
+    if (matches.length > 1) {
+      throw new Error(`More than one saved team is named '${name}' (${matches.map((m) => m.cwd).join(', ')}); pass \`cwd\` to pick one.`);
+    }
+    return Team.load({ cwd: matches[0].cwd, name, env, runner });
   }
 
   save() {
@@ -327,6 +353,16 @@ export class Team {
       throw new Error(`The team already has ${active.length} active teammates (limit ${this.data.limits.maxTeammates}). Shut one down or raise H0WZY_TEAM_MAX_TEAMMATES.`);
     }
 
+    // Validate everything before touching the team, so a refused spawn leaves no trace.
+    const taskText = spec.task === undefined || spec.task === null ? null : String(spec.task).trim();
+    if (spec.task !== undefined && spec.task !== null && !taskText) throw new Error('`task` must not be empty.');
+    let existingTask = null;
+    if (spec.taskId) {
+      existingTask = this.task(spec.taskId);
+      if (!existingTask) throw new Error(`No task '${spec.taskId}'.`);
+      if (existingTask.status !== 'pending') throw new Error(`Task ${existingTask.id} is ${existingTask.status}; only pending tasks can be assigned.`);
+    }
+
     const notes = [];
     let isolation = 'none';
     let workDir = this.data.cwd;
@@ -334,6 +370,14 @@ export class Team {
     if (spec.canEdit) {
       repoRoot = findRepoRoot(this.data.cwd);
       const wanted = spec.isolation || (repoRoot ? 'worktree' : 'none');
+      // An editing Antigravity teammate runs agy with every permission check off
+      // (there is no edit-only mode), so it only ever gets a throwaway worktree.
+      if (spec.agent === 'antigravity' && (wanted !== 'worktree' || !repoRoot)) {
+        throw new Error(
+          'An editing Antigravity teammate must work in its own git worktree (agy has no edit-only permission mode). ' +
+            (repoRoot ? 'Use isolation "worktree".' : 'The project folder is not a git repository; spawn it read-only or use Claude Code / Codex for edits.')
+        );
+      }
       if (wanted === 'worktree' && !repoRoot) {
         notes.push('isolation "worktree" needs a git repository; this teammate edits the project folder directly');
       } else if (wanted === 'worktree') {
@@ -368,6 +412,7 @@ export class Team {
       sessionId: existing?.sessionId ?? null,
       history: existing?.history ?? [],
       mailbox: existing?.mailbox ?? [],
+      notes: existing?.notes ?? [],
       usage: existing?.usage ?? { costUsd: 0, inputTokens: 0, outputTokens: 0 },
       lastError: null,
       claimNext: true,
@@ -378,16 +423,13 @@ export class Team {
     const target = existing || member;
 
     let assigned = null;
-    if (spec.task) {
-      const created = this.createTasks([{ title: String(spec.task).split('\n')[0].slice(0, 80), description: String(spec.task), assignee: name }], { schedule: false });
+    if (taskText) {
+      const created = this.createTasks([{ title: taskText.split('\n')[0].slice(0, 80), description: taskText, assignee: name }], { schedule: false });
       assigned = created[0];
-    } else if (spec.taskId) {
-      const t = this.task(spec.taskId);
-      if (!t) throw new Error(`No task '${spec.taskId}'.`);
-      if (t.status !== 'pending') throw new Error(`Task ${t.id} is ${t.status}; only pending tasks can be assigned.`);
-      t.assignee = name;
-      t.updatedAt = Date.now();
-      assigned = t;
+    } else if (existingTask) {
+      existingTask.assignee = name;
+      existingTask.updatedAt = Date.now();
+      assigned = existingTask;
     }
     this.data.closed = false;
     this.save();
@@ -397,6 +439,13 @@ export class Team {
 
   createTasks(specs, { schedule = true } = {}) {
     this.assertWritable();
+    // A check runs a command with this server's rights, outside the host's own
+    // permission prompts, so the developer has to allow checks explicitly.
+    if (Array.isArray(specs) && specs.some((t) => t?.check) && !/^(1|true|yes|on)$/i.test(String(this.env.H0WZY_TEAM_ALLOW_CHECKS ?? ''))) {
+      throw new Error(
+        'Completion checks are off: they run a command without asking. The developer can turn them on with H0WZY_TEAM_ALLOW_CHECKS=1 in the team server environment. Nothing was created.'
+      );
+    }
     const { tasks, created, nextNumber } = addTasks(this.tasks, specs, { nextNumber: this.data.nextTaskNumber });
     this.tasks = tasks;
     this.data.nextTaskNumber = nextNumber;
@@ -502,6 +551,15 @@ export class Team {
       if (current && current.status === 'in_progress' && current.assignee === member.name) task = current;
       if (!task) task = nextTaskFor(member.name, this.tasks, { selfClaim: this.data.selfClaim && member.claimNext !== false });
       const hasMail = member.mailbox.length > 0;
+      // A task this member reported as blocked waits for new input: a message wakes the
+      // member on it again; otherwise only the lead (task_update) can reopen it.
+      if (!task && hasMail) {
+        const blocked = this.tasks.find((t) => t.status === 'blocked' && t.assignee === member.name);
+        if (blocked) {
+          blocked.status = 'pending';
+          task = blocked;
+        }
+      }
       if (!task && !hasMail) continue;
 
       if (member.turns >= member.maxTurns) {
@@ -527,7 +585,7 @@ export class Team {
     this.data.turnsUsed += 1;
     if (task && task.status === 'pending') claim(task, member.name);
     member.currentTask = task ? task.id : null;
-    const messages = member.mailbox.splice(0);
+    const messages = [...(member.notes || []).splice(0), ...member.mailbox.splice(0)];
     const controller = new AbortController();
     this.controllers.set(member.name, controller);
     const run = this.runTurn(member, task, messages, controller.signal)
@@ -647,18 +705,21 @@ export class Team {
       }
     }
     if (dropped.length) {
-      member.mailbox.push({
+      // Not mail: a bounce must not wake the sender (it could loop on its own mistake).
+      const valid = `lead, ${[...names].join(', ')}`;
+      (member.notes ||= []).push({
         from: 'team',
-        text: `Your message(s) to ${dropped.join(', ')} were not delivered: no such member. Valid names: lead, ${[...names].join(', ')}.`,
+        text: `Your message(s) to ${dropped.join(', ')} were not delivered: no such member. Valid names: ${valid}.`,
         at: Date.now(),
       });
+      this.emit('message', `[message] ${member.name} tried to message unknown member(s) ${dropped.join(', ')} (valid: ${valid}); not delivered`, { member: member.name });
     }
 
     let outcome = '';
     if (stillMine) {
       const now = Date.now();
       if (report.status === 'done') {
-        const check = task.check ? await this.runCheck(task, member) : { ok: true };
+        const check = task.check ? await this.runCheck(task, member, this.controllers.get(member.name)?.signal) : { ok: true };
         if (check.ok) {
           task.status = 'completed';
           task.result = { summary: report.summary, ref };
@@ -679,10 +740,10 @@ export class Team {
         member.currentTask = null;
         outcome = ` → ${task.id} failed`;
       } else if (report.status === 'blocked') {
-        task.status = 'pending';
+        task.status = 'blocked';
         task.note = `blocked: ${report.summary}`;
         member.currentTask = null;
-        outcome = ` → ${task.id} blocked`;
+        outcome = ` → ${task.id} blocked (waits for a message or task_update)`;
       } else {
         outcome = ` → ${task.id} continues`;
       }
@@ -691,7 +752,8 @@ export class Team {
 
     member.claimNext = report.claimNext;
     member.history = [...member.history, { turn: n, task: task?.id ?? null, status: report.status, summary: report.summary }].slice(-HISTORY_SIZE);
-    if (member.canEdit && member.owns.length) await this.checkOwnership(member);
+    // In a shared folder, git status also shows the lead's and other teammates' edits.
+    if (member.canEdit && member.isolation === 'worktree' && member.owns.length) await this.checkOwnership(member);
     settle();
     this.emit(
       'idle',
@@ -700,10 +762,10 @@ export class Team {
     );
   }
 
-  async runCheck(task, member) {
+  async runCheck(task, member, signal) {
     const [command, ...args] = task.check;
     const bin = resolveBinary(command) || command;
-    const res = await executeProcess(bin, args, { cwd: member.workDir, timeoutMs: CHECK_TIMEOUT_MS, toolName: command });
+    const res = await executeProcess(bin, args, { cwd: member.workDir, timeoutMs: CHECK_TIMEOUT_MS, toolName: command, signal });
     const output = sanitizeOutput(`${res.stdout}\n${res.stderr}`.trim()).slice(-CHECK_OUTPUT_CHARS);
     return { ok: res.ok, exitCode: res.exitCode, output };
   }

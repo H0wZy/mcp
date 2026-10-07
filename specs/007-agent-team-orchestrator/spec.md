@@ -239,7 +239,7 @@ The lead (or developer) can attach a check to a task, for example "the test suit
 **Isolation and quality (P3)**
 
 - **FR-020**: A teammate MAY be spawned in isolated mode, with its own copy of the workspace, or with a declared set of files it owns. The lead MUST be able to list each isolated teammate's changes as a separate change set.
-- **FR-021**: A task MAY carry a completion check. A "done" report MUST only complete the task if the check passes. Otherwise the output MUST go back to the teammate.
+- **FR-021**: A task MAY carry a completion check, if the developer has turned checks on (`H0WZY_TEAM_ALLOW_CHECKS=1`). A check runs a command without the host's permission prompt. A "done" report MUST only complete the task if the check passes. Otherwise the output MUST go back to the teammate.
 
 **Observability**
 

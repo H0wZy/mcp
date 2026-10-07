@@ -15,6 +15,17 @@ const BINARIES = {
   antigravity: ['agy', 'AGY_BIN'],
 };
 
+export const MAX_ARGV_PROMPT = process.platform === 'win32' ? 24000 : 100000;
+
+/** Keeps the head (role, task) and tail (report format) of a prompt that is too long. */
+export function fitArgv(prompt, max = MAX_ARGV_PROMPT) {
+  if (prompt.length <= max) return prompt;
+  const marker = `\n\n[… ${prompt.length - max} characters cut to fit the command line …]\n\n`;
+  const keep = max - marker.length;
+  const head = Math.ceil(keep * 0.6);
+  return prompt.slice(0, head) + marker + prompt.slice(prompt.length - (keep - head));
+}
+
 const INSTALL_HINTS = {
   claude: 'Install Claude Code (https://code.claude.com/docs/en/setup) or set CLAUDE_CLI_PATH.',
   codex: 'Install the Codex CLI (npm install -g @openai/codex) or set CODEX_CLI_PATH.',
@@ -85,8 +96,9 @@ export function buildTurn({ member, prompt, hop = null, outputFile, minutes = 20
     return { ok: true, command, args, input: prompt, cwd: member.workDir, env: chainEnv, sessionId: null, warnings: [] };
   }
 
-  // antigravity: agy reads the prompt from -p (no text stdin mode).
-  const args = ['-p', prompt, '--model', member.cliModel];
+  // antigravity: agy reads the prompt from -p (no text stdin mode), and a command line
+  // is limited (32,767 chars on Windows), so the middle of a huge prompt is cut.
+  const args = ['-p', fitArgv(prompt), '--model', member.cliModel];
   if (member.cliEffort) args.push('--effort', member.cliEffort);
   args.push('--print-timeout', `${Math.max(1, Math.floor(minutes))}m`, '--output-format', 'json');
   if (member.canEdit) args.push('--dangerously-skip-permissions');

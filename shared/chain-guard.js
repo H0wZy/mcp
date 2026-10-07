@@ -343,11 +343,13 @@ function chainNotice({ agents, target, depth, maxDepth, slot, maxCalls, atMaxDep
  * @param {(pid: number) => boolean} [options.alive] Liveness check (injectable for tests)
  * @returns {{ ok: true, hop: object } | { ok: false, refusal: { rule: string, text: string, trace: string } }}
  */
-export function beginHop({ target, tool = '', host = 'host', env = process.env, now = Date.now(), ancestors, alive } = {}) {
+export function beginHop({ target, tool = '', host = 'host', env = process.env, now = Date.now(), ancestors, alive, chain: rootChain, claim = true } = {}) {
   const own = loadPolicy(env);
   const dir = stateDir(env);
   const targetName = agentName(target);
-  const resolved = resolveChain({ env, host, now, dir, policy: own, ancestors, alive });
+  // A caller that owns a long-lived chain (the team server) passes it in; its hops
+  // don't spend the chain's call budget, which is left to the bridges they start.
+  const resolved = rootChain ? { kind: 'root', chain: rootChain } : resolveChain({ env, host, now, dir, policy: own, ancestors, alive });
 
   if (resolved.kind === 'unknown') {
     return refusal(
@@ -397,8 +399,8 @@ export function beginHop({ target, tool = '', host = 'host', env = process.env, 
   }
 
   if (isNew) sweepOldRuns(dir, now);
-  const slot = claimSlot(dir, chain, policy, isNew);
-  if (!slot) {
+  const slot = claim ? claimSlot(dir, chain, policy, isNew) : usedSlots(dir, chain.runId);
+  if (claim && !slot) {
     return refusal(
       'budget',
       `the chain already used its ${policy.maxCalls} bridge calls`,
@@ -410,6 +412,7 @@ export function beginHop({ target, tool = '', host = 'host', env = process.env, 
   const agents = [...chain.agents, targetName];
   const atMaxDepth = targetDepth >= policy.maxDepth;
   const registered = new Set();
+  let spawned = false;
   const started = Date.now();
 
   const hop = {
@@ -451,6 +454,7 @@ export function beginHop({ target, tool = '', host = 'host', env = process.env, 
     /** Records a started agent so nested bridges that lost the env can still find the chain. */
     registerAgent(pid) {
       if (!Number.isInteger(pid)) return;
+      spawned = true;
       try {
         mkdirSync(join(dir, 'agents'), { recursive: true, mode: 0o700 });
         writeFileSync(
@@ -466,6 +470,8 @@ export function beginHop({ target, tool = '', host = 'host', env = process.env, 
     finish(outcome = 'ran') {
       for (const pid of registered) rmSync(join(dir, 'agents', `${pid}.json`), { force: true });
       registered.clear();
+      // Nothing started (bad arguments, missing binary): give the call back.
+      if (claim && !spawned) rmSync(join(runDir(dir, chain.runId), 'calls', String(slot)), { force: true });
       if (!own.logEnabled) return;
       try {
         mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -489,6 +495,33 @@ export function beginHop({ target, tool = '', host = 'host', env = process.env, 
     },
   };
   return { ok: true, hop };
+}
+
+/**
+ * Starts a long-lived chain owned by one process (the team server: spec 007, FR-018).
+ * Its policy is fixed now; hops started with `beginHop({ chain, claim: false })` share
+ * its deadline, and the bridges those agents call share its call budget.
+ *
+ * @param {{ env?: NodeJS.ProcessEnv, agents?: string[], deadline?: number }} [options]
+ * @returns {{ runId: string, agents: string[], depth: number, deadline: number }}
+ */
+export function createRootChain({ env = process.env, agents = ['team'], deadline } = {}) {
+  const policy = loadPolicy(env);
+  const dir = stateDir(env);
+  const chain = {
+    runId: randomBytes(4).toString('hex'),
+    agents: agents.map(agentName),
+    depth: agents.length - 1,
+    deadline: Number.isFinite(deadline) ? deadline : Date.now() + policy.deadlineMinutes * 60000,
+  };
+  const base = runDir(dir, chain.runId);
+  mkdirSync(join(base, 'calls'), { recursive: true, mode: 0o700 });
+  writeFileSync(
+    join(base, 'policy.json'),
+    JSON.stringify({ maxDepth: policy.maxDepth, maxCalls: policy.maxCalls, allowRevisit: policy.allowRevisit, deadline: chain.deadline }),
+    { mode: 0o600 }
+  );
+  return chain;
 }
 
 /**

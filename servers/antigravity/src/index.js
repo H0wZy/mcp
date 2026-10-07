@@ -174,8 +174,9 @@ async function executeAgyPrompt({
 
   const res = await executeProcess(agyBin, args, {
     cwd: workDir,
-    // Outlive --print-timeout so agy can return its partial output itself.
-    timeoutMs: minutes * 60000 + 30000,
+    // Outlive --print-timeout so agy can return its partial output itself, but never
+    // the chain's deadline.
+    timeoutMs: hop ? hop.capTimeoutMs(minutes * 60000 + 30000) : minutes * 60000 + 30000,
     signal,
     toolName: 'agy',
     env: hop?.childEnv,

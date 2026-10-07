@@ -165,6 +165,26 @@ export class TeamStore {
     return join(this.worktreesDir, member);
   }
 
+  /**
+   * Saved teams with this name across every project: [{ dir, cwd }].
+   */
+  static findByName(name, env = process.env) {
+    if (!NAME_PATTERN.test(String(name ?? ''))) return [];
+    const root = join(stateDir(env), 'teams');
+    let projects;
+    try {
+      projects = readdirSync(root);
+    } catch {
+      return [];
+    }
+    const found = [];
+    for (const project of projects) {
+      const data = readJson(join(root, project, name, 'team.json'), null);
+      if (data?.cwd) found.push({ dir: join(root, project, name), cwd: data.cwd });
+    }
+    return found;
+  }
+
   /** Names of the teams saved for a project. */
   static listTeams(cwd, env = process.env) {
     try {

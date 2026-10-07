@@ -9,7 +9,7 @@
    - Codex: `~/.codex/config.toml`;
    - Antigravity: `~/.gemini/config/mcp_config.json`.
 
-   The launch command comes from `ResolveServerScript("team")` (a local clone or `npx -y @h0wzy/mcp-server-team`), with `--host <host>` appended. Codex entries get the same `env_vars` and `tool_timeout_sec = 3900` / `startup_timeout_sec = 60` as the other bridges, plus `H0WZY_TEAM_*` in `env_vars`. Config writers keep the Phase 0 rules: atomic, `0600`, refuse unparsable files.
+   The launch command comes from `ResolveServerScript("team")` (a local clone or `npx -y @h0wzy/mcp-server-team`), with `--host <host>` appended. Codex entries get the same `env_vars` and `tool_timeout_sec = 3900` / `startup_timeout_sec = 60` as the other bridges, plus the `H0WZY_TEAM_*` limits and `H0WZY_TEAM_ALLOW_CHECKS` in `env_vars`. Config writers keep the Phase 0 rules: atomic, `0600`, refuse unparsable files.
 2. **Copies the skill** `agent-team/SKILL.md`, embedded in the binary from `cli/skills/agent-team/SKILL.md` with `//go:embed`, to every location that host reads:
 
    | Host | User scope | Project scope (`--scope project`) |
