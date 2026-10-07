@@ -44,7 +44,7 @@ function initialize(cli) {
   });
 }
 
-for (const name of ['codex', 'antigravity']) {
+for (const name of ['codex', 'antigravity', 'claude']) {
   test(`${name} server starts from its npm layout with @h0wzy/mcp-shared installed`, async () => {
     const { root, cli } = stageServer(name, { withShared: true });
     try {

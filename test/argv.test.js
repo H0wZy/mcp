@@ -11,8 +11,13 @@ import { createFakeAgent } from './helpers/fake-agent.js';
 
 const codexFake = createFakeAgent('codex');
 const agyFake = createFakeAgent('agy');
+const claudeFake = createFakeAgent('claude');
 process.env.CODEX_CLI_PATH = codexFake.bin;
 process.env.AGY_BIN = agyFake.bin;
+process.env.CLAUDE_CLI_PATH = claudeFake.bin;
+for (const key of Object.keys(process.env)) {
+  if (key.startsWith('CLAUDE_BRIDGE_')) delete process.env[key];
+}
 delete process.env.CODEX_MODEL;
 delete process.env.CODEX_EFFORT;
 delete process.env.AGY_MODEL;
@@ -20,6 +25,7 @@ delete process.env.AGY_EFFORT;
 
 const { createServer: createCodexServer } = await import('../servers/codex/src/index.js');
 const { createServer: createAntigravityServer } = await import('../servers/antigravity/src/index.js');
+const { createServer: createClaudeServer } = await import('../servers/claude/src/index.js');
 
 const work = mkdtempSync(join(tmpdir(), 'hmcp-argv-'));
 // tmpdir can be a symlink (macOS) or an 8.3 short path (Windows); compare real paths.
@@ -28,6 +34,7 @@ const samePath = (a, b) => realpathSync.native(a) === realpathSync.native(b);
 test.after(() => {
   codexFake.cleanup();
   agyFake.cleanup();
+  claudeFake.cleanup();
   rmSync(work, { recursive: true, force: true });
 });
 
@@ -61,6 +68,21 @@ function withLog(fake, fn) {
 
 const codex = createCodexServer();
 const agy = createAntigravityServer();
+const claude = createClaudeServer();
+
+// Sets env vars for the duration of fn, then restores them.
+async function withEnv(vars, fn) {
+  const saved = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, vars);
+  try {
+    return await fn();
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
 
 test('ask_codex runs read-only, never asks for approval, and sends the prompt on stdin', async () => {
   const result = await withLog(codexFake, () => callTool(codex, 'ask_codex', { prompt: 'what is 2+2?' }));
@@ -208,4 +230,114 @@ test('configure_* rejects invalid values with a clear message and leaves the ses
   assert.match(result.content[0].text, /Nothing was changed/);
   const state = await callTool(codex, 'configure_codex', { action: 'get' });
   assert.match(state.content[0].text, /Effort: medium/);
+});
+
+
+// ---------------------------------------------------------------------------
+// Claude Code bridge (spec 006, contracts/claude-bridge.md)
+// ---------------------------------------------------------------------------
+
+test('ask_claude runs read-only with only Read/Grep/Glob, no session, prompt on stdin', async () => {
+  const result = await withLog(claudeFake, () => callTool(claude, 'ask_claude', { prompt: 'explain the guard' }));
+  assert.equal(result.isError, false, result.content[0].text);
+  const { argv, input } = lastCall(claudeFake);
+  assert.deepEqual(argv, [
+    '-p', '--output-format', 'json',
+    '--model', 'opus',
+    '--effort', 'medium',
+    '--permission-prompts', 'none',
+    '--tools', 'Read,Grep,Glob',
+    '--no-session-persistence',
+  ]);
+  assert.match(input, /^\[H0wZy\/mcp chain\] You are claude, called by host/);
+  assert.ok(input.endsWith('\n\nexplain the guard'), input);
+  // Non-JSON output is returned as text.
+  assert.match(result.content[0].text, /^fake agent answer\n\n\[claude · model=opus · effort=medium · source=startup\]\n\[chain host→claude · depth 1\/2/);
+});
+
+test('ask_claude reads the JSON result and reports cost and turns', async () => {
+  const stdout = JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'the answer', total_cost_usd: 0.0123, num_turns: 2, session_id: 'x' });
+  const result = await withEnv({ FAKE_AGENT_STDOUT: stdout }, () => withLog(claudeFake, () => callTool(claude, 'review_claude', { prompt: 'look', paths: [work] })));
+  assert.equal(result.isError, false, result.content[0].text);
+  assert.match(result.content[0].text, /^the answer\n\n\[claude · model=opus · effort=medium · source=startup · cost=\$0\.0123 · turns=2\]/);
+  const { argv, input } = lastCall(claudeFake);
+  // The context folder is readable; the prompt lists it and carries the review prefix.
+  assert.deepEqual(argv.slice(argv.indexOf('--add-dir'), argv.indexOf('--add-dir') + 2), ['--add-dir', work]);
+  assert.match(input, /Context files\/folders to read and consider in full:\n- /);
+  assert.match(input, /You are performing a comprehensive code review/);
+});
+
+test('claude caps come from the environment and a reached cap is reported', async () => {
+  const stdout = JSON.stringify({ type: 'result', subtype: 'error_max_turns', is_error: true, result: '', num_turns: 3 });
+  const result = await withEnv({ FAKE_AGENT_STDOUT: stdout, CLAUDE_BRIDGE_MAX_TURNS: '3', CLAUDE_BRIDGE_MAX_BUDGET_USD: '0.5' }, () =>
+    withLog(claudeFake, () => callTool(claude, 'ask_claude', { prompt: 'think hard' }))
+  );
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /^Stopped: the turn cap set by CLAUDE_BRIDGE_MAX_TURNS was reached\./);
+  const { argv } = lastCall(claudeFake);
+  assert.deepEqual(argv.slice(argv.indexOf('--max-turns'), argv.indexOf('--max-turns') + 2), ['--max-turns', '3']);
+  assert.deepEqual(argv.slice(argv.indexOf('--max-budget-usd'), argv.indexOf('--max-budget-usd') + 2), ['--max-budget-usd', '0.5']);
+});
+
+test('delegate_claude edits inside cwd with acceptEdits and denied prompts', async () => {
+  const extra = mkdtempSync(join(tmpdir(), 'hmcp-extra-'));
+  try {
+    const result = await withLog(claudeFake, () => callTool(claude, 'delegate_claude', { prompt: 'refactor', cwd: work, paths: [extra], timeout_minutes: 5 }));
+    assert.equal(result.isError, false, result.content[0].text);
+    const { argv, cwd } = lastCall(claudeFake);
+    assert.deepEqual(argv, [
+      '-p', '--output-format', 'json',
+      '--model', 'opus',
+      '--effort', 'medium',
+      '--permission-prompts', 'none',
+      '--permission-mode', 'acceptEdits',
+      '--add-dir', extra,
+    ]);
+    assert.ok(samePath(cwd, work), `${cwd} vs ${work}`);
+
+    await withEnv({ CLAUDE_BRIDGE_DELEGATE_PERMISSION_MODE: 'auto' }, () => withLog(claudeFake, () => callTool(claude, 'delegate_claude', { prompt: 'x', cwd: work })));
+    assert.ok(lastCall(claudeFake).argv.join(' ').includes('--permission-mode auto'));
+
+    const bad = await withEnv({ CLAUDE_BRIDGE_DELEGATE_PERMISSION_MODE: 'bypassPermissions' }, () =>
+      withLog(claudeFake, () => callTool(claude, 'delegate_claude', { prompt: 'x', cwd: work }))
+    );
+    assert.ok(lastCall(claudeFake).argv.join(' ').includes('--permission-mode acceptEdits'));
+    assert.match(bad.content[0].text, /CLAUDE_BRIDGE_DELEGATE_PERMISSION_MODE='bypassPermissions' is not one of acceptEdits, auto, dontAsk/);
+  } finally {
+    rmSync(extra, { recursive: true, force: true });
+  }
+});
+
+test('haiku gets no --effort flag and the footer says effort=n/a', async () => {
+  const result = await withLog(claudeFake, () => callTool(claude, 'ask_claude', { prompt: 'quick', model: 'haiku', effort: 'high' }));
+  const { argv } = lastCall(claudeFake);
+  assert.equal(argv.includes('--effort'), false, argv.join(' '));
+  assert.deepEqual(argv.slice(argv.indexOf('--model'), argv.indexOf('--model') + 2), ['--model', 'haiku']);
+  assert.match(result.content[0].text, /\[claude · model=haiku · effort=n\/a · source=override\]/);
+});
+
+test('at the maximum depth every target starts without bridge tools (L1)', async () => {
+  // This process plays an agent at depth 1 of chain tester>codex: the next hop is the last.
+  const chainEnv = {
+    H0WZY_MCP_RUN_ID: 'abcdef12',
+    H0WZY_MCP_CHAIN: 'tester>codex',
+    H0WZY_MCP_DEPTH: '1',
+    H0WZY_MCP_DEADLINE: String(Date.now() + 600000),
+  };
+  await withEnv(chainEnv, async () => {
+    await withLog(claudeFake, () => callTool(claude, 'ask_claude', { prompt: 'deep' }));
+    const claudeArgv = lastCall(claudeFake).argv;
+    assert.deepEqual(claudeArgv.slice(-2), ['--strict-mcp-config', '--disable-slash-commands']);
+    assert.match(lastCall(claudeFake).input, /maximum depth/);
+
+    await withLog(agyFake, () => callTool(agy, 'ask_antigravity', { prompt: 'deep' }));
+    assert.ok(lastCall(agyFake).argv.includes('--disable-slash-commands'));
+
+    // codex itself is in this chain: calling it again is a cycle, refused before spawning.
+    const before = codexFake.calls().length;
+    const refused = await withLog(codexFake, () => callTool(codex, 'ask_codex', { prompt: 'again' }));
+    assert.equal(refused.isError, true);
+    assert.match(refused.content[0].text, /Loop guard: cycle/);
+    assert.equal(codexFake.calls().length, before, 'a refused call must not start the agent');
+  });
 });

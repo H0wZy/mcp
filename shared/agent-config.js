@@ -157,6 +157,59 @@ export const CURATED_CATALOGS = {
   ],
 };
 
+
+const CLAUDE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+// Claude Code model aliases follow new releases on their own; the full ids pin a
+// version. Haiku 4.5 has no effort control, so `--effort` is never sent for it.
+CURATED_CATALOGS.claude = [
+  {
+    id: 'fable',
+    displayName: 'Claude Fable (alias, currently Fable 5.1)',
+    efforts: CLAUDE_EFFORTS,
+    defaultEffort: 'high',
+    tierNote: 'deep',
+    description: 'Most capable Claude model, for the hardest reasoning and long agentic work. Highest cost.',
+  },
+  {
+    id: 'opus',
+    displayName: 'Claude Opus (alias, currently Opus 5.5)',
+    efforts: CLAUDE_EFFORTS,
+    defaultEffort: 'medium',
+    tierNote: 'balanced',
+    description: 'Strong default for coding and agentic work.',
+  },
+  {
+    id: 'sonnet',
+    displayName: 'Claude Sonnet (alias, currently Sonnet 5.5)',
+    efforts: CLAUDE_EFFORTS,
+    defaultEffort: 'medium',
+    tierNote: 'light',
+    description: 'Fast, lower-cost everyday coding model.',
+  },
+  {
+    id: 'haiku',
+    displayName: 'Claude Haiku (alias, currently Haiku 4.5)',
+    efforts: CLAUDE_EFFORTS,
+    effortControl: false,
+    defaultEffort: 'medium',
+    tierNote: 'light',
+    description: 'Fastest and cheapest. No effort control.',
+  },
+  { id: 'claude-fable-5-1', displayName: 'Claude Fable 5.1', efforts: CLAUDE_EFFORTS, defaultEffort: 'high', tierNote: 'deep', description: 'Pinned Fable 5.1.' },
+  { id: 'claude-opus-5-5', displayName: 'Claude Opus 5.5', efforts: CLAUDE_EFFORTS, defaultEffort: 'medium', tierNote: 'balanced', description: 'Pinned Opus 5.5.' },
+  { id: 'claude-sonnet-5-5', displayName: 'Claude Sonnet 5.5', efforts: CLAUDE_EFFORTS, defaultEffort: 'medium', tierNote: 'light', description: 'Pinned Sonnet 5.5.' },
+  {
+    id: 'claude-haiku-4-5',
+    displayName: 'Claude Haiku 4.5',
+    efforts: CLAUDE_EFFORTS,
+    effortControl: false,
+    defaultEffort: 'medium',
+    tierNote: 'light',
+    description: 'Pinned Haiku 4.5. No effort control.',
+  },
+];
+
 export const BUILTIN_TIERS = {
   antigravity: {
     light: { model: 'gemini-3.8-flash', effort: 'low' },
@@ -168,6 +221,19 @@ export const BUILTIN_TIERS = {
     balanced: { model: 'gpt-6-astra', effort: 'medium' },
     deep: { model: 'gpt-6-astra', effort: 'xhigh' },
   },
+  claude: {
+    light: { model: 'sonnet', effort: 'low' },
+    balanced: { model: 'opus', effort: 'medium' },
+    deep: { model: 'fable', effort: 'high' },
+  },
+};
+
+// Env prefix and startup defaults per provider.
+const PROVIDERS = {
+  antigravity: { prefix: 'AGY_', model: 'gemini-3.8-flash', effort: 'high' },
+  codex: { prefix: 'CODEX_', model: 'gpt-6-astra', effort: 'medium' },
+  // Not CLAUDE_: Claude Code exports CLAUDE_EFFORT and other CLAUDE_* vars to its children.
+  claude: { prefix: 'CLAUDE_BRIDGE_', model: 'opus', effort: 'medium' },
 };
 
 
@@ -301,7 +367,7 @@ export function findModelInCatalog(rawInput, catalog = []) {
  * Creates an agent configuration manager for a specific provider.
  *
  * @param {Object} options
- * @param {'antigravity'|'codex'} options.provider
+ * @param {'antigravity'|'codex'|'claude'} options.provider
  * @param {string} [options.defaultModel]
  * @param {string} [options.defaultEffort]
  * @param {() => Promise<Array<any>>} [options.catalogLoader] Async loader for external CLI catalog
@@ -310,11 +376,11 @@ export function findModelInCatalog(rawInput, catalog = []) {
 export function createAgentConfig(options) {
   const { provider, catalogLoader, env = process.env } = options;
 
-  if (provider !== 'antigravity' && provider !== 'codex') {
+  if (!PROVIDERS[provider]) {
     throw new Error(`Unsupported provider: ${provider}`);
   }
 
-  const prefix = provider === 'antigravity' ? 'AGY_' : 'CODEX_';
+  const { prefix } = PROVIDERS[provider];
 
   // 1. Parse Developer Ceilings from Environment
   const rawMaxEffort = (env[`${prefix}MAX_EFFORT`] || '').trim().toLowerCase();
@@ -344,8 +410,8 @@ export function createAgentConfig(options) {
   const envModel = (env[`${prefix}MODEL`] || options.defaultModel || '').trim();
   const envEffort = (env[`${prefix}EFFORT`] || options.defaultEffort || '').trim().toLowerCase();
 
-  let startupModel = envModel || (provider === 'antigravity' ? 'gemini-3.8-flash' : 'gpt-6-astra');
-  let startupEffort = isValidEffort(envEffort) ? envEffort : provider === 'antigravity' ? 'high' : 'medium';
+  let startupModel = envModel || PROVIDERS[provider].model;
+  let startupEffort = isValidEffort(envEffort) ? envEffort : PROVIDERS[provider].effort;
 
   // Extract implied effort if startup model was formatted as "Gemini 3.8 Flash (High)"
   const startupMatch = startupModel.match(/^(.+?)\s*\((low|medium|high|xhigh|max|ultra)\)$/i);
@@ -675,19 +741,24 @@ export function createAgentConfig(options) {
     let cliModel = resolved.model;
     let cliEffort = resolved.effort;
 
+    let effortApplied = true;
+    const found = findModelInCatalog(resolved.model, catalog);
     if (provider === 'antigravity') {
       // Find variant ID if available
-      const found = findModelInCatalog(resolved.model, catalog);
       if (found && found.entry.variants && found.entry.variants[resolved.effort]) {
         cliModel = found.entry.variants[resolved.effort];
         cliEffort = null; // Passed via variant model ID directly
       }
+    } else if (found?.entry.effortControl === false) {
+      cliEffort = null; // The model takes no effort setting at all
+      effortApplied = false;
     }
 
     return Object.freeze({
       provider,
       model: resolved.model,
       effort: resolved.effort,
+      effortApplied,
       cliModel,
       cliEffort,
       source: hasOverride ? 'override' : resolved.source,
@@ -698,8 +769,13 @@ export function createAgentConfig(options) {
   /**
    * Formats the standardized execution footer.
    */
-  function formatFooter(snapshot) {
-    const base = `[${snapshot.provider} · model=${snapshot.model} · effort=${snapshot.effort} · source=${snapshot.source}]`;
+  function formatFooter(snapshot, extras = {}) {
+    const effort = snapshot.effortApplied === false ? 'n/a' : snapshot.effort;
+    const more = Object.entries(extras)
+      .filter(([, v]) => v !== undefined && v !== null && v !== '')
+      .map(([k, v]) => ` · ${k}=${v}`)
+      .join('');
+    const base = `[${snapshot.provider} · model=${snapshot.model} · effort=${effort} · source=${snapshot.source}${more}]`;
     if (snapshot.warnings && snapshot.warnings.length > 0) {
       return `\n\n${base}\n⚠️ ${snapshot.warnings.join('\n⚠️ ')}`;
     }

@@ -77,7 +77,7 @@ Format: `[ID] [P?] [Story] Description`. `[P]` means it can run in parallel (dif
 - [ ] T014 [US2] Implement `servers/claude/src/index.js`:
   - the `configure_claude` and the 5 task tools;
   - the argv per the contract, the JSON result parsing, the cost and turns in the footer, the cap reporting;
-  - `CLAUDE_DELEGATE_PERMISSION_MODE` validation and the resilient errors.
+  - `CLAUDE_BRIDGE_DELEGATE_PERMISSION_MODE` validation and the resilient errors.
 - [ ] T015 [P] [US2] Write `servers/claude/bin/cli.js` (pass `--host` through) and `servers/claude/README.md`
 - [ ] T016 [US2] Add claude argv contract tests to `test/argv.test.js`:
   - read-only, delegate, max depth;
@@ -92,7 +92,7 @@ Format: `[ID] [P?] [Story] Description`. `[P]` means it can run in parallel (dif
 ## Phase 5: User Story 3 — Budget and deadline (P2)
 
 - [ ] T019 [US3] Add parallel sibling tests to `shared/test/chain-guard.test.js`: 5 `beginHop` calls against budget 3 → exactly 3 slots. Also: a deadline in the past is refused, and the timeout is capped to the remaining time.
-- [ ] T020 [US3] Cap delegate timeouts and agy's `--print-timeout` by `hop.capTimeoutMs` in all three servers. The `CLAUDE_MAX_*` caps are covered by T014 and T016.
+- [ ] T020 [US3] Cap delegate timeouts and agy's `--print-timeout` by `hop.capTimeoutMs` in all three servers. The `CLAUDE_BRIDGE_MAX_*` caps are covered by T014 and T016.
 
 ---
 

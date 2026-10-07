@@ -1,8 +1,8 @@
 // Fake `codex` / `agy` binaries for tests: they record argv and stdin and answer
 // without touching any real model. Behaviour is driven by environment variables
 // that the servers pass through to the agents they spawn (FAKE_AGENT_LOG,
-// FAKE_AGENT_MODE=sleep|bridge, FAKE_AGENT_PIDFILE, FAKE_AGENT_STDERR, FAKE_BRIDGE_PLAN,
-// FAKE_AGENT_STRIP_ENV).
+// FAKE_AGENT_MODE=sleep|bridge, FAKE_AGENT_PIDFILE, FAKE_AGENT_STDERR, FAKE_AGENT_STDOUT,
+// FAKE_AGENT_EXIT, FAKE_BRIDGE_PLAN, FAKE_AGENT_STRIP_ENV).
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -24,7 +24,8 @@ const done = () => {
   if (process.env.FAKE_AGENT_MODE === 'sleep') { setTimeout(() => {}, 60000); return; }
   if (process.env.FAKE_AGENT_MODE === 'bridge') { bridge(); return; }
   if (process.env.FAKE_AGENT_STDERR) process.stderr.write(process.env.FAKE_AGENT_STDERR);
-  process.stdout.write('fake agent answer');
+  process.stdout.write(process.env.FAKE_AGENT_STDOUT || 'fake agent answer');
+  if (process.env.FAKE_AGENT_EXIT) process.exitCode = Number(process.env.FAKE_AGENT_EXIT);
 };
 // Bridge mode: act like an agent that uses an MCP bridge itself. FAKE_BRIDGE_PLAN maps
 // this agent's name to { server, host, tool }; every agent in a chain keeps delegating,

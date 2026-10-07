@@ -314,3 +314,31 @@ test('Antigravity builtin tiers resolve to 3.8 flash at low, medium, and high', 
   assert.equal(deep.active.effort, 'high');
 });
 
+
+test('claude provider: aliases, tiers, no effort flag for haiku, CLAUDE_BRIDGE_ settings (not Claude Code\'s CLAUDE_EFFORT)', () => {
+  const config = createAgentConfig({ provider: 'claude', env: {} });
+  assert.deepEqual(config.get().active, { model: 'opus', effort: 'medium', tier: null, source: 'startup' });
+  assert.deepEqual(config.get().tiers, {
+    light: { model: 'sonnet', effort: 'low' },
+    balanced: { model: 'opus', effort: 'medium' },
+    deep: { model: 'fable', effort: 'high' },
+  });
+
+  const haiku = config.resolveCall({ model: 'haiku', effort: 'high' });
+  assert.equal(haiku.cliModel, 'haiku');
+  assert.equal(haiku.cliEffort, null);
+  assert.deepEqual(haiku.warnings, []);
+  assert.match(config.formatFooter(haiku), /\[claude · model=haiku · effort=n\/a · source=override\]/);
+
+  const pinned = config.resolveCall({ model: 'Claude Opus 5.5', effort: 'xhigh' });
+  assert.equal(pinned.cliModel, 'claude-opus-5-5');
+  assert.equal(pinned.cliEffort, 'xhigh');
+  assert.match(config.formatFooter(pinned, { cost: '$0.02', turns: 4 }), /source=override · cost=\$0\.02 · turns=4\]/);
+
+  const capped = createAgentConfig({ provider: 'claude', env: { CLAUDE_BRIDGE_MAX_TIER: 'balanced' } }).resolveCall({ model: 'fable', effort: 'max' });
+  assert.equal(capped.model, 'opus');
+  assert.equal(capped.effort, 'medium');
+
+  const startup = createAgentConfig({ provider: 'claude', env: { CLAUDE_BRIDGE_MODEL: 'sonnet', CLAUDE_BRIDGE_EFFORT: 'high', CLAUDE_EFFORT: 'xhigh' } });
+  assert.deepEqual(startup.get().active, { model: 'sonnet', effort: 'high', tier: null, source: 'startup' });
+});

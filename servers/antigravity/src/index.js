@@ -16,6 +16,7 @@ const {
   formatResilientResponse,
   sanitizeOutput,
   createAgentConfig,
+  createConfigureTool,
   noBridgeArgs,
   validateCwd,
   normalizePaths,
@@ -210,94 +211,20 @@ async function executeAgyPrompt({
   };
 }
 
-export const configureAntigravityTool = {
+export const configureAntigravityTool = createConfigureTool({
   name: 'configure_antigravity',
+  label: 'Google Antigravity',
+  agentConfig,
   description:
     'Inspect or change Google Antigravity model and reasoning effort for the current session. ' +
     'Supports pre-configured tiers ("light" for trivial tasks, "balanced" for routine work, "deep" for hard bugs/complex architecture/security), ' +
     'explicit models (e.g. "gemini-3.8-flash", "gemini-3.1-pro"), or custom efforts ("low"|"medium"|"high"|"xhigh"|"max"). ' +
     'Actions: "get" (view active settings), "set" (apply updates), "reset" (restore startup defaults), "list" (catalog & tiers). ' +
     'Claude Code may switch tiers autonomously based on task difficulty.',
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  inputSchema: {
-    type: 'object',
-    properties: {
-      action: {
-        type: 'string',
-        enum: ['get', 'set', 'reset', 'list'],
-        default: 'get',
-        description: 'Action to perform. Default is "get" (read current state without modifying).',
-      },
-      tier: {
-        type: 'string',
-        enum: ['light', 'balanced', 'deep'],
-        description: 'Preset tier: "light" (Flash Low), "balanced" (Flash Medium), "deep" (Flash High).',
-      },
-      model: {
-        type: 'string',
-        description: 'Model family or variant identifier (e.g. "gemini-3.8-flash", "gemini-3.1-pro").',
-      },
-      effort: {
-        type: 'string',
-        enum: ['low', 'medium', 'high', 'xhigh', 'max'],
-        description: 'Reasoning effort level. Automatically mapped to supported levels.',
-      },
-    },
-  },
-  handler: (args = {}) => {
-    const action = (args.action || 'get').toLowerCase();
-
-    if (action === 'get') {
-      const state = agentConfig.get();
-      return (
-        `⚙️ [Google Antigravity Active Configuration]\n` +
-        `Model:  ${state.active.model}\n` +
-        `Effort: ${state.active.effort}` +
-        (state.active.tier ? ` (Tier: ${state.active.tier})` : '') +
-        `\nSource: ${state.active.source}\n\n` +
-        JSON.stringify(state, null, 2)
-      );
-    }
-
-    if (action === 'set') {
-      let updated;
-      try {
-        updated = agentConfig.set(args);
-      } catch (err) {
-        return { isError: true, text: `❌ ${err.message}\nNothing was changed. Use action "list" to see valid models, efforts and tiers.` };
-      }
-      let summary =
-        `⚙️ [Google Antigravity Configuration Updated]\n` +
-        `Previous: ${updated.previous.model} (effort: ${updated.previous.effort}, source: ${updated.previous.source})\n` +
-        `Active:   ${updated.active.model} (effort: ${updated.active.effort}, source: ${updated.active.source})\n`;
-
-      if (updated.warnings && updated.warnings.length > 0) {
-        summary += `⚠️ Warnings:\n  - ${updated.warnings.join('\n  - ')}\n`;
-      }
-      return summary + '\n' + JSON.stringify(updated, null, 2);
-    }
-
-    if (action === 'reset') {
-      const resetState = agentConfig.reset();
-      return (
-        `🔄 [Google Antigravity Configuration Reset to Startup Defaults]\n` +
-        `Active: ${resetState.active.model} (effort: ${resetState.active.effort}, source: startup)\n\n` +
-        JSON.stringify(resetState, null, 2)
-      );
-    }
-
-    if (action === 'list') {
-      const catalog = agentConfig.list();
-      return (
-        `📋 [Google Antigravity Model Catalog & Tiers]\n` +
-        `Catalog Source: ${catalog.catalogSource} (status: ${catalog.catalogStatus})\n\n` +
-        JSON.stringify(catalog, null, 2)
-      );
-    }
-
-    throw new Error(`Unsupported action '${action}'. Valid actions: get, set, reset, list`);
-  },
-};
+  tierDescription: 'Preset tier: "light" (Flash Low), "balanced" (Flash Medium), "deep" (Flash High).',
+  modelDescription: 'Model family or variant identifier (e.g. "gemini-3.8-flash", "gemini-3.1-pro").',
+  efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+});
 
 export const askAntigravityTool = {
   name: 'ask_antigravity',

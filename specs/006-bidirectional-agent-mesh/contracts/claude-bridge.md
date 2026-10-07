@@ -1,6 +1,6 @@
 # Contract: Claude Code Bridge (`@h0wzy/mcp-server-claude`)
 
-Server name `claude`, version in lockstep (1.0.6). The binary is found with `resolveBinary('claude', 'CLAUDE_BIN')`.
+Server name `claude`, version in lockstep (1.0.6). The binary is found with `resolveBinary('claude', 'CLAUDE_CLI_PATH')`.
 
 ## Tools
 
@@ -53,15 +53,17 @@ Timeouts:
 
 | Variable | Effect |
 |---|---|
-| `CLAUDE_BIN` | Path to the `claude` executable |
-| `CLAUDE_MODEL`, `CLAUDE_EFFORT` | Startup model / effort (default `opus` / `medium`) |
-| `CLAUDE_MAX_TIER`, `CLAUDE_MAX_EFFORT`, `CLAUDE_TIER_LIGHT|BALANCED|DEEP` | Spec 005 ceilings and tier overrides |
-| `CLAUDE_MAX_TURNS` | Adds `--max-turns` to every call |
-| `CLAUDE_MAX_BUDGET_USD` | Adds `--max-budget-usd` to every call |
-| `CLAUDE_DELEGATE_PERMISSION_MODE` | `acceptEdits` (default), `auto` or `dontAsk`. Any other value is ignored, with a warning |
+| `CLAUDE_CLI_PATH` | Path to the `claude` executable |
+| `CLAUDE_BRIDGE_MODEL`, `CLAUDE_BRIDGE_EFFORT` | Startup model / effort (default `opus` / `medium`) |
+| `CLAUDE_BRIDGE_MAX_TIER`, `CLAUDE_BRIDGE_MAX_EFFORT`, `CLAUDE_BRIDGE_TIER_LIGHT|BALANCED|DEEP` | Spec 005 ceilings and tier overrides |
+| `CLAUDE_BRIDGE_MAX_TURNS` | Adds `--max-turns` to every call |
+| `CLAUDE_BRIDGE_MAX_BUDGET_USD` | Adds `--max-budget-usd` to every call |
+| `CLAUDE_BRIDGE_DELEGATE_PERMISSION_MODE` | `acceptEdits` (default), `auto` or `dontAsk`. Any other value is ignored, with a warning |
+
+The child's environment drops the session variables a Claude Code ancestor exports (`CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_MESSAGING_*`, `CLAUDE_EFFORT`, `CLAUDE_PID`). A nested `claude -p` must not attach to the outer session, and `CLAUDE_EFFORT` must not compete with `--effort`.
 
 ## Reply
 
 - **Success**: the JSON `result`, then the execution footer `[claude · model=<m> · effort=<e|n/a> · source=<s> · cost=$<x> · turns=<n>]` (cost and turns only when reported), then the chain trace line.
-- **`is_error` true or a non-zero exit**: `formatResilientResponse` (auth / rate limit / generic). An `error_max_turns` or `error_max_budget_usd` subtype adds `Stopped: the <turn|budget> cap set by CLAUDE_MAX_* was reached.`
-- **Binary missing**: install guidance (`npm install -g @anthropic-ai/claude-code` or the native installer, or set `CLAUDE_BIN`).
+- **`is_error` true or a non-zero exit**: `formatResilientResponse` (auth / rate limit / generic). An `error_max_turns` or `error_max_budget_usd` subtype adds `Stopped: the <turn|budget> cap set by CLAUDE_BRIDGE_MAX_* was reached.`
+- **Binary missing**: install guidance (`npm install -g @anthropic-ai/claude-code` or the native installer, or set `CLAUDE_CLI_PATH`).

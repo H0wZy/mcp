@@ -150,8 +150,8 @@ A bridge server is recognized by its launch args: `@h0wzy/mcp-server-<x>` or `se
 
 - **Every call**: `claude -p --output-format json --model <m> [--effort <e>] --permission-prompts none`. The prompt goes on stdin. The model is a curated alias (`fable`, `opus`, `sonnet`, `haiku`) or a full model id. `--effort` is skipped for models without effort control (Haiku 4.5).
 - **Read-only** (`ask|review|brainstorm|plan_claude`): `--tools Read,Grep,Glob --no-session-persistence`, plus `--add-dir <dir>` for each context folder. No edit or shell tool exists in the session at all. Anything that would prompt is denied.
-- **Delegate**: `--permission-mode acceptEdits` (or `CLAUDE_DELEGATE_PERMISSION_MODE` ∈ `acceptEdits|auto|dontAsk`), run with `cwd`, plus `--add-dir` for extra folders. Edits are auto-approved and everything else that would prompt is denied, so it never hangs (FR-015).
-- **Caps**: `CLAUDE_MAX_TURNS` → `--max-turns`, `CLAUDE_MAX_BUDGET_USD` → `--max-budget-usd` (FR-017).
+- **Delegate**: `--permission-mode acceptEdits` (or `CLAUDE_BRIDGE_DELEGATE_PERMISSION_MODE` ∈ `acceptEdits|auto|dontAsk`), run with `cwd`, plus `--add-dir` for extra folders. Edits are auto-approved and everything else that would prompt is denied, so it never hangs (FR-015).
+- **Caps**: `CLAUDE_BRIDGE_MAX_TURNS` → `--max-turns`, `CLAUDE_BRIDGE_MAX_BUDGET_USD` → `--max-budget-usd` (FR-017).
 - **Output**: a JSON object with `result`, `is_error`, `subtype`, `total_cost_usd`, `num_turns` and `session_id`. The bridge returns `result` and adds `cost=$…` and `turns=…` to the footer. An `error_max_*` subtype is reported as a reached cap. If parsing fails, the raw text is returned.
 - **Alternatives**: `--permission-mode plan` was rejected for read-only. In print mode the plan ends in an `ExitPlanMode` call that nobody approves, and it doesn't remove `Bash`. `--restricted` is stronger, but it ignores the user's settings files, which may hold auth or model settings people rely on.
 
@@ -160,7 +160,7 @@ A bridge server is recognized by its launch args: `@h0wzy/mcp-server-<x>` or `se
 - **Decision**:
   - Tiers: light = `sonnet`/`low`, balanced = `opus`/`medium` (startup default), deep = `fable`/`high`.
   - Catalog: the aliases `fable` (deep), `opus` (balanced), `sonnet` (light) and `haiku` (light, no effort flag), plus the current full ids `claude-fable-5-1`, `claude-opus-5-5`, `claude-sonnet-5-5` and `claude-haiku-4-5`.
-  - Env prefix `CLAUDE_` (`CLAUDE_MODEL`, `CLAUDE_EFFORT`, `CLAUDE_MAX_TIER`, `CLAUDE_MAX_EFFORT`, `CLAUDE_TIER_*`).
+  - Env prefix `CLAUDE_BRIDGE_`, not `CLAUDE_`: Claude Code exports `CLAUDE_EFFORT` and other `CLAUDE_*` variables to its child processes (`CLAUDE_BRIDGE_MODEL`, `CLAUDE_BRIDGE_EFFORT`, `CLAUDE_BRIDGE_MAX_TIER`, `CLAUDE_BRIDGE_MAX_EFFORT`, `CLAUDE_BRIDGE_TIER_*`).
 - **Rationale**: Aliases follow model releases automatically. Haiku 4.5 rejects the effort parameter, so `--effort` is not sent for it.
 
 ### D7. Timeouts

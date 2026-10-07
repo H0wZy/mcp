@@ -13,6 +13,7 @@ const {
   executeProcess,
   formatResilientResponse,
   createAgentConfig,
+  createConfigureTool,
   noBridgeArgs,
   validateCwd,
   normalizePaths,
@@ -174,94 +175,20 @@ async function executeCodexCommand(
   };
 }
 
-export const configureCodexTool = {
+export const configureCodexTool = createConfigureTool({
   name: 'configure_codex',
+  label: 'OpenAI Codex',
+  agentConfig,
   description:
     'Inspect or change OpenAI Codex model and reasoning effort for the current session. ' +
     'Supports pre-configured tiers ("light" for quick lookups, "balanced" for routine work, "deep" for complex refactoring/architecture/security), ' +
     'explicit models (e.g. "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-terra"), or custom efforts ("low"|"medium"|"high"|"xhigh"|"max"|"ultra"). ' +
     'Actions: "get" (view active settings), "set" (apply updates), "reset" (restore startup defaults), "list" (catalog & tiers). ' +
     'Claude Code may switch tiers autonomously based on task difficulty.',
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  inputSchema: {
-    type: 'object',
-    properties: {
-      action: {
-        type: 'string',
-        enum: ['get', 'set', 'reset', 'list'],
-        default: 'get',
-        description: 'Action to perform. Default is "get" (read current state without modifying).',
-      },
-      tier: {
-        type: 'string',
-        enum: ['light', 'balanced', 'deep'],
-        description: 'Preset tier: "light" (gpt-6-luna low), "balanced" (gpt-6-astra medium), "deep" (gpt-6-astra xhigh).',
-      },
-      model: {
-        type: 'string',
-        description: 'Model slug (e.g. "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-terra").',
-      },
-      effort: {
-        type: 'string',
-        enum: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
-        description: 'Reasoning effort level. Automatically mapped to supported levels.',
-      },
-    },
-  },
-  handler: (args = {}) => {
-    const action = (args.action || 'get').toLowerCase();
-
-    if (action === 'get') {
-      const state = agentConfig.get();
-      return (
-        `⚙️ [OpenAI Codex Active Configuration]\n` +
-        `Model:  ${state.active.model}\n` +
-        `Effort: ${state.active.effort}` +
-        (state.active.tier ? ` (Tier: ${state.active.tier})` : '') +
-        `\nSource: ${state.active.source}\n\n` +
-        JSON.stringify(state, null, 2)
-      );
-    }
-
-    if (action === 'set') {
-      let updated;
-      try {
-        updated = agentConfig.set(args);
-      } catch (err) {
-        return { isError: true, text: `❌ ${err.message}\nNothing was changed. Use action "list" to see valid models, efforts and tiers.` };
-      }
-      let summary =
-        `⚙️ [OpenAI Codex Configuration Updated]\n` +
-        `Previous: ${updated.previous.model} (effort: ${updated.previous.effort}, source: ${updated.previous.source})\n` +
-        `Active:   ${updated.active.model} (effort: ${updated.active.effort}, source: ${updated.active.source})\n`;
-
-      if (updated.warnings && updated.warnings.length > 0) {
-        summary += `⚠️ Warnings:\n  - ${updated.warnings.join('\n  - ')}\n`;
-      }
-      return summary + '\n' + JSON.stringify(updated, null, 2);
-    }
-
-    if (action === 'reset') {
-      const resetState = agentConfig.reset();
-      return (
-        `🔄 [OpenAI Codex Configuration Reset to Startup Defaults]\n` +
-        `Active: ${resetState.active.model} (effort: ${resetState.active.effort}, source: startup)\n\n` +
-        JSON.stringify(resetState, null, 2)
-      );
-    }
-
-    if (action === 'list') {
-      const catalog = agentConfig.list();
-      return (
-        `📋 [OpenAI Codex Model Catalog & Tiers]\n` +
-        `Catalog Source: ${catalog.catalogSource} (status: ${catalog.catalogStatus})\n\n` +
-        JSON.stringify(catalog, null, 2)
-      );
-    }
-
-    throw new Error(`Unsupported action '${action}'. Valid actions: get, set, reset, list`);
-  },
-};
+  tierDescription: 'Preset tier: "light" (gpt-6-luna low), "balanced" (gpt-6-astra medium), "deep" (gpt-6-astra xhigh).',
+  modelDescription: 'Model slug (e.g. "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-terra").',
+  efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+});
 
 export const askCodexTool = {
   name: 'ask_codex',

@@ -441,3 +441,26 @@ func TestWriteFileAtomicLeavesNoTempFiles(t *testing.T) {
 		t.Fatalf("expected only the target file, found %v", names)
 	}
 }
+
+func TestResolveServerScriptUsesH0wzyMcpRepo(t *testing.T) {
+	repo := t.TempDir()
+	script := filepath.Join(repo, "servers", "claude", "bin", "cli.js")
+	if err := os.MkdirAll(filepath.Dir(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(script, []byte("// stub\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("H0WZY_MCP_REPO", repo)
+	t.Chdir(t.TempDir())
+
+	command, args := ResolveServerScript("claude")
+	if command != "node" || len(args) != 1 || args[0] != filepath.ToSlash(script) {
+		t.Fatalf("got %s %v, want node %s", command, args, filepath.ToSlash(script))
+	}
+
+	command, args = ResolveServerScript("antigravity")
+	if command != "npx" || args[1] != "@h0wzy/mcp-server-antigravity" {
+		t.Fatalf("missing server should fall back to npx, got %s %v", command, args)
+	}
+}
