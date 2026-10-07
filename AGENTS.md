@@ -10,8 +10,8 @@ H0wZy/mcp connects the three leading coding agents (Claude Code, Codex, Antigrav
 
 | Path | What lives there |
 |---|---|
-| `shared/` | Zero-dependency core used by every server: `server.js` (JSON-RPC 2.0 stdio loop), `executor.js` (child process runner), `resolver.js` (binary lookup, PATHEXT), `errors.js` (resilient errors + secret redaction), `agent-config.js` (model / effort / tiers, spec 005) |
-| `servers/codex/`, `servers/antigravity/` | One MCP server per target agent. Same tool family on each: `ask_*`, `review_*`, `brainstorm_*`, `plan_*`, `delegate_*`, `configure_*` |
+| `shared/` | Zero-dependency core used by every server: `server.js` (JSON-RPC 2.0 stdio loop), `executor.js` (child process runner), `resolver.js` (binary lookup, PATHEXT), `errors.js` (resilient errors + secret redaction), `agent-config.js` (model / effort / tiers, spec 005), `configure-tool.js` (the shared `configure_*` tool), `chain-guard.js` + `ancestry.js` + `l1.js` (loop guard, spec 006) |
+| `servers/codex/`, `servers/antigravity/`, `servers/claude/` | One MCP server per target agent. Same tool family on each: `ask_*`, `review_*`, `brainstorm_*`, `plan_*`, `delegate_*`, `configure_*` |
 | `cli/` | Go CLI `hmcp` (cobra + charmbracelet): installs bridges into host configs, plus `doctor`, `list`, `upgrade`, `version`, TUI |
 | `npm/` | npm wrapper `@h0wzy/mcp` that runs the Go binary |
 | `test/`, `shared/test/` | Node test suites (`node:test`) |
@@ -47,7 +47,7 @@ Rules:
 - If a `research.md` already exists when you run `speckit-plan`, extend it. Don't replace it.
 - `.specify/memory/constitution.md` is still the unfilled template. Until it is ratified (`speckit-constitution`), use the rules in this file as the project principles.
 
-Current roadmap: `005` model / effort control (merged, unreleased), `006` bidirectional mesh + loop guard, `007` multi-vendor agent team orchestrator.
+Current roadmap: `005` model / effort control, `006` bidirectional mesh + loop guard (implemented), `007` multi-vendor agent team orchestrator. All three ship in v1.0.6.
 
 ## Coding rules
 
@@ -56,7 +56,13 @@ Current roadmap: `005` model / effort control (merged, unreleased), `006` bidire
 - Shared logic belongs in `shared/`. If you write the same code in two servers, move it to `shared/` instead.
 - Keep **tool parity**: every target server exposes the same tool family with the same parameter names (`prompt`, `paths`, `cwd`, `model`, `effort`, `timeout_minutes`). A new tool or parameter goes into every server in the same change.
 - Tool `description` and `inputSchema` text is read by LLMs to pick tools. Keep it accurate: correct default models, which tools edit files, which are read-only.
-- Spawn agents only through `executeProcess` (no shell strings). Prefer passing prompts through stdin (Windows `cmd.exe` re-splits argv for `.cmd` shims).
+- Spawn agents only through `executeProcess` (no shell strings). Prefer passing prompts through stdin.
+- A tool that starts an agent is marked `spawnsAgent: true`, so the loop guard decides before it runs. Its handler must use `ctx.hop`:
+  - `childEnv` as the env;
+  - `registerAgent` in `onSpawn`;
+  - `capTimeoutMs` for the timeout;
+  - `notice` at the top of the prompt;
+  - `noBridgeArgs()` when `atMaxDepth`.
 - Every task tool response ends with the execution footer (`[provider · model=… · effort=… · source=…]`).
 - Errors go through `formatResilientResponse`. Never throw raw provider output at the client.
 
@@ -69,6 +75,7 @@ Current roadmap: `005` model / effort control (merged, unreleased), `006` bidire
 **Tests**
 - Use `node:test` + `node:assert/strict`. Tests must not need the real `codex`, `agy` or `claude` binaries. Use `test/helpers/fake-agent.js` (fake binaries set through `CODEX_CLI_PATH` / `AGY_BIN`; they record argv, stdin and cwd) and assert on the exact argv, as `test/argv.test.js` does. A change to the flags passed to an agent must update that test.
 - Tests that capture `process.stdout.write` must pass through anything that isn't a JSON-RPC line, because the test runner writes there too.
+- Tests that call bridge tools import `test/helpers/guard-env.js` first. It clears inherited `H0WZY_MCP_*` chain variables (an agent running the tests may carry them) and points the guard state at a temp dir.
 
 ## Security rules
 
@@ -79,7 +86,7 @@ Current roadmap: `005` model / effort control (merged, unreleased), `006` bidire
 
 ## When you are one of the agents in a chain (loop safety)
 
-This repo builds bridges between agents. You may yourself be running *inside* a bridge call: for example, Codex running because Claude Code called `delegate_codex`. Follow these rules even before the spec-006 loop guard exists:
+This repo builds bridges between agents. You may yourself be running *inside* a bridge call: for example, Codex running because Claude Code called `delegate_codex`. The spec-006 loop guard enforces depth, cycle, budget and deadline limits in code. Follow these rules anyway, because they save tokens before the guard has to refuse anything:
 
 - **Don't call back** the agent that invoked you, and don't start a chain longer than two hops (A → B → C). Do the work yourself instead.
 - Don't use bridge tools (`ask_*`, `review_*`, `delegate_*`, …) to test the code in this repo against the real agents unless the developer asks for it. Use the fake-binary tests.
@@ -89,8 +96,9 @@ This repo builds bridges between agents. You may yourself be running *inside* a 
 ## Versioning and releases
 
 - Latest published release: **v1.0.5** (commit `5cacc64`). Next release: **v1.0.6**, which ships specs 005 + 006 + 007 together.
+- A **new** npm package, such as `@h0wzy/mcp-server-claude`, must be published once by hand before CI can publish it. npm trusted publishing (OIDC) is configured per existing package.
 - All packages share one version. A release bump must update **every** one of these:
-  - `package.json`, `shared/package.json`, `servers/codex/package.json`, `servers/antigravity/package.json`, `npm/package.json` (plus any new `servers/*/package.json`)
+  - `package.json`, `shared/package.json`, `servers/codex/package.json`, `servers/antigravity/package.json`, `servers/claude/package.json`, `npm/package.json` (plus any new `servers/*/package.json`), including each server's `@h0wzy/mcp-shared` dependency version
   - the `version` passed to `createMcpServer` in each `servers/*/src/index.js`
   - `cli/version/version.go` → `Current` (a `var`, because release builds overwrite it with goreleaser `-ldflags -X`)
   - the fallback version constants in `npm/bin/h0wzy-mcp.js`

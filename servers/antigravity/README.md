@@ -26,6 +26,8 @@ Part of the **[H0wZy/mcp](https://github.com/H0wZy/mcp)** multi-agent ecosystem.
 >
 > **Default model:** `Gemini 3.8 Flash (High)`. Override per call (`model`, `effort`), per session with `configure_antigravity`, or at startup with `AGY_MODEL` / `AGY_EFFORT`.
 
+> **Loop guard (spec 006).** Every task tool goes through the shared loop guard before the agent starts. Each reply ends with a trace line such as `[chain claude→antigravity · depth 1/2 · calls 1/8 · run a1b2c3d4]`, and calls that would loop are refused with `⛔ [Loop guard: …]`. `hmcp install` adds `--host <agent>` to the launch arguments so the guard knows which agent is calling.
+
 ---
 
 ## 🚀 Installation & Usage

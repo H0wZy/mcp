@@ -56,9 +56,13 @@ H0wZy/mcp/
 │   └── version/                # Background update detector & registry version cache
 ├── servers/                    # Decoupled, host-agnostic MCP servers
 │   ├── antigravity/            # Google Antigravity bridge (Gemini, default 3.8 Flash)
+│   ├── claude/                 # Claude Code bridge (default opus), so Codex/Antigravity can call Claude
 │   └── codex/                  # OpenAI Codex CLI bridge (GPT-6, default Astra)
 ├── shared/                     # Reusable core (@h0wzy/mcp-shared)
 │   ├── server.js               # createMcpServer() generic JSON-RPC 2.0 stdio engine
+│   ├── chain-guard.js          # Loop guard: depth, cycles, call budget, deadline (spec 006)
+│   ├── ancestry.js · l1.js     # Nesting fallback via process ancestry · start agents without bridge tools
+│   ├── configure-tool.js       # The configure_<agent> tool shared by every bridge
 │   ├── executor.js             # Child process runner: timeouts, tree kill, cancel, output cap
 │   ├── validate.js             # cwd / paths / timeout validation for agent command lines
 │   ├── agent-config.js         # Model & reasoning-effort catalogs, tiers and ceilings
@@ -140,15 +144,19 @@ hmcp setup-path
 # Diagnose local environment, paths, and agent communication health
 hmcp doctor
 
-# Diagnose and output as JSON
+# Diagnose and output as JSON ({ tools, bridges, cycles, guard })
 hmcp doctor --json
 
-# Install all supported integrations automatically
+# Install all supported integrations automatically (asks before creating cycles;
+# non-interactive runs skip cycle-forming directions unless --allow-cycles is given)
 hmcp install --all
+hmcp install --all --allow-cycles
 
 # Install a specific bridge globally or locally
 hmcp install claude-antigravity --scope user
 hmcp install claude-codex --scope project
+hmcp install codex-claude          # Codex → Claude Code
+hmcp install antigravity-claude    # Antigravity → Claude Code
 
 # List available bridges
 hmcp list
@@ -175,16 +183,22 @@ hmcp remove claude-antigravity
 | **Codex** | `brainstorm_codex` | Architectural exploration, trade-offs, and system design ideation with Codex |
 | **Codex** | `plan_codex` | Step-by-step implementation planning and checklist generation |
 | **Codex** | `delegate_codex` | **Edits files.** Hands an implementation task to Codex inside `cwd` (workspace-write sandbox; `prompt`, `cwd`, optional `paths`, `model`, `effort`, `timeout_minutes` 1-60, default 30). Review the diff afterwards |
+| **Claude Code** | `configure_claude` | **Session control.** Same actions and tiers as the others; models are Claude Code aliases (`opus`, `sonnet`, `haiku`, `fable`) or full ids. |
+| **Claude Code** | `ask_claude` | Second opinion from Claude Code. Read-only: only `Read`, `Grep` and `Glob` exist in the session |
+| **Claude Code** | `review_claude` | Structured code review. Read-only |
+| **Claude Code** | `brainstorm_claude` | Architectural alternatives and trade-offs. Read-only |
+| **Claude Code** | `plan_claude` | Dependency-ordered implementation plan. Read-only |
+| **Claude Code** | `delegate_claude` | **Edits files.** Hands a task to Claude Code inside `cwd`: edits are auto-approved, anything else that would ask is denied, so it never waits on a prompt |
 
 ### 🎛️ Dynamic Model & Reasoning Effort Control
 
 Claude Code can now autonomously (or on request) escalate or de-escalate reasoning power according to task complexity:
 
-| Tier | Task Type Fit | Antigravity Default | Codex Default |
-| :--- | :--- | :--- | :--- |
-| **`light`** | Quick lookups, summaries, trivial syntax checks | `gemini-3.8-flash` @ `low` | `gpt-6-luna` @ `low` |
-| **`balanced`** | Everyday coding, routine code reviews, checklists | `gemini-3.8-flash` @ `medium` | `gpt-6-astra` @ `medium` |
-| **`deep`** | Complex refactors, architectural trade-offs, security audits | `gemini-3.8-flash` @ `high` | `gpt-6-astra` @ `xhigh` |
+| Tier | Task Type Fit | Antigravity Default | Codex Default | Claude Code Default |
+| :--- | :--- | :--- | :--- | :--- |
+| **`light`** | Quick lookups, summaries, trivial syntax checks | `gemini-3.8-flash` @ `low` | `gpt-6-luna` @ `low` | `sonnet` @ `low` |
+| **`balanced`** | Everyday coding, routine code reviews, checklists | `gemini-3.8-flash` @ `medium` | `gpt-6-astra` @ `medium` | `opus` @ `medium` |
+| **`deep`** | Complex refactors, architectural trade-offs, security audits | `gemini-3.8-flash` @ `high` | `gpt-6-astra` @ `xhigh` | `fable` @ `high` |
 
 Every task execution appends a standardized verification footer confirming the active settings:
 `[codex · model=gpt-6-astra · effort=high · source=tier:deep]`
@@ -194,11 +208,31 @@ To keep resource and quota consumption under strict developer control, set optio
 - `AGY_MAX_EFFORT` / `CODEX_MAX_EFFORT`: Clamps reasoning effort to a maximum level (e.g. `medium`).
 - `AGY_MAX_TIER` / `CODEX_MAX_TIER`: Clamps autonomous model escalation to a maximum tier (e.g. `balanced`).
 - `AGY_TIER_LIGHT` / `CODEX_TIER_DEEP`: Override default tier mappings using `model[:effort]` syntax (e.g. `gpt-6-sol:high`).
+- Claude Code bridge: the same settings with the `CLAUDE_BRIDGE_` prefix (`CLAUDE_BRIDGE_MODEL`, `CLAUDE_BRIDGE_MAX_TIER`, …), plus `CLAUDE_BRIDGE_MAX_TURNS` and `CLAUDE_BRIDGE_MAX_BUDGET_USD` caps per call. The prefix is not `CLAUDE_`, because Claude Code exports `CLAUDE_EFFORT` and other `CLAUDE_*` variables to its children.
 
 > **Delegation tools write to disk.** `delegate_codex` and `delegate_antigravity` run the agent inside the given `cwd` and may create or modify files. They never commit for you: always review the resulting diff (`git diff`) before keeping the changes.
 >
 > **Startup defaults:** Antigravity tools default to `Gemini 3.8 Flash (High)` (override with `AGY_MODEL` / `AGY_EFFORT`). Codex tools default to `gpt-6-astra` at `medium` effort (override with `CODEX_MODEL` / `CODEX_EFFORT`). Codex's read-only tools run in Codex's `read-only` sandbox, and Antigravity's run without auto-approval, so actions that need approval are skipped; only the `delegate_*` tools can write.
 
+
+---
+
+## 🛡️ Loop Guard (agents calling agents)
+
+With bridges in every direction, Codex can ask Antigravity, which asks Claude, which asks Codex… Every bridge runs the same guard **before** it starts an agent:
+
+| Rule | Default | Hard cap | Setting |
+| :--- | :--- | :--- | :--- |
+| Max depth (A → B → C, then stop) | 2 | 4 | `H0WZY_MCP_MAX_DEPTH` |
+| Calling back an agent already in the chain | refused | — | `H0WZY_MCP_ALLOW_REVISIT=1` |
+| Bridge calls per chain | 8 | 32 | `H0WZY_MCP_MAX_CALLS` |
+| Chain deadline (children never outlive it) | 60 min | 240 min | `H0WZY_MCP_DEADLINE_MINUTES` |
+
+- **Each top-level call starts its own chain.** The chain context travels to child agents in `H0WZY_MCP_*` variables. When a host strips them (Codex forwards only allow-listed variables), the bridge still finds its chain through a registry of running bridge-started agents (`~/.h0wzy-mcp/`) and its process ancestry. If it can't tell, it refuses.
+- **No bridge tools at the maximum depth.** An agent started there gets no bridge tools where its CLI allows it (Claude Code `--strict-mcp-config`, Codex `mcp_servers.<name>.enabled=false`), and its prompt opens with its position in the chain.
+- **Refusals start nothing.** They come back as `⛔ [Loop guard: …]` errors that tell the calling agent to finish the work itself. Every reply ends with a trace line such as `[chain claude→codex · depth 1/2 · calls 1/8 · run a1b2c3d4]`.
+- `H0WZY_MCP_CHAIN_LOG=1` keeps a JSON Lines log at `~/.h0wzy-mcp/chain.log` (run id, agents, depth, outcome, duration; never prompt text).
+- `hmcp doctor` lists every installed direction, the cycles they form, and the active limits.
 
 ---
 

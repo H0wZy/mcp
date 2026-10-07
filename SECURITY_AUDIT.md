@@ -73,6 +73,26 @@ We introduced `SanitizeHealthMessage(msg)`:
 - **Before**: `publish-packages.yml` lacked `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}` and had `continue-on-error: true` on all publish steps, silently passing even when npm publish failed with 404/401.
 - **Hardening**: Added `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}` and removed `continue-on-error: true`, ensuring publishing failures are surfaced immediately.
 
+### 4.4 v1.0.6 hardening (Phase 0 review and spec 006)
+- **Least privilege for read-only tools**:
+  - Codex read tools run with `sandbox_mode=read-only` and `approval_policy=never`.
+  - Antigravity read tools run without `--dangerously-skip-permissions`, so print mode soft-denies edits and unapproved commands.
+  - Claude read tools start with only `Read`, `Grep` and `Glob`.
+  - Context `paths` are no longer passed to Codex as `--add-dir`, which would make those folders writable.
+- **Process lifecycle** (`shared/executor.js`, `shared/server.js`):
+  - Timeouts and MCP cancellation kill the agent's whole process tree.
+  - Output is capped.
+  - Closing the server stops its agents.
+- **Windows command lines**:
+  - npm and pnpm `.cmd` shims run as `node <script>`, without `cmd.exe`.
+  - Any other `.cmd` gets quoted arguments, and values `cmd.exe` would expand (`"`, `%`, `!`, line breaks) are refused.
+- **Loop guard** (`shared/chain-guard.js`, spec 006): bridge chains are capped by depth, revisits, call budget and deadline before anything is spawned. The guard fails closed when a nested call can't be traced. Its state files (`~/.h0wzy-mcp/`) are written with mode `0600`, and the opt-in log never contains prompt text.
+- **Inherited session variables**: the Claude bridge drops a Claude Code ancestor's session variables, including `CLAUDE_CODE_MESSAGING_TOKEN`, before it starts `claude`.
+- **Config writers** (`cli/config/`):
+  - A file that fails to parse is refused instead of overwritten.
+  - Writes are atomic.
+  - TOML sections are edited by lines (RE2 has no lookahead).
+
 ---
 
 ## 5. Summary Table of Files Hardened

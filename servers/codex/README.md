@@ -22,6 +22,8 @@ Part of the **[H0wZy/mcp](https://github.com/H0wZy/mcp)** multi-agent ecosystem.
 
 > `delegate_codex` writes to disk and never commits. Review the diff (`git diff`) before keeping its changes.
 
+> **Loop guard (spec 006).** Every task tool goes through the shared loop guard before the agent starts. Each reply ends with a trace line such as `[chain claude→codex · depth 1/2 · calls 1/8 · run a1b2c3d4]`, and calls that would loop are refused with `⛔ [Loop guard: …]`. `hmcp install` adds `--host <agent>` to the launch arguments so the guard knows which agent is calling.
+
 ---
 
 ## 🚀 Installation & Usage

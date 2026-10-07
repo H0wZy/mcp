@@ -50,7 +50,7 @@ hmcp setup-path
 # Diagnose local environment, CLI installations, and paths
 hmcp doctor
 
-# Diagnose and output as JSON
+# Diagnose and output as JSON ({ tools, bridges, cycles, guard })
 hmcp doctor --json
 
 # Install all supported integrations automatically
@@ -59,6 +59,8 @@ hmcp install --all
 # Install a specific bridge globally or per-project
 hmcp install claude-antigravity --scope user
 hmcp install claude-codex --scope project
+hmcp install codex-claude            # let Codex call Claude Code
+hmcp install antigravity-claude      # let Antigravity call Claude Code
 
 # List available bridges
 hmcp list
