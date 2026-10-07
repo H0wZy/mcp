@@ -1,6 +1,7 @@
 // Fake `codex` / `agy` binaries for tests: they record argv and stdin and answer
 // without touching any real model. Behaviour is driven by environment variables
-// that the servers pass through to the agents they spawn.
+// that the servers pass through to the agents they spawn (FAKE_AGENT_LOG,
+// FAKE_AGENT_MODE=sleep, FAKE_AGENT_PIDFILE, FAKE_AGENT_STDERR).
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,6 +21,7 @@ const done = () => {
   }
   if (process.env.FAKE_AGENT_PIDFILE) fs.writeFileSync(process.env.FAKE_AGENT_PIDFILE, String(process.pid));
   if (process.env.FAKE_AGENT_MODE === 'sleep') { setTimeout(() => {}, 60000); return; }
+  if (process.env.FAKE_AGENT_STDERR) process.stderr.write(process.env.FAKE_AGENT_STDERR);
   process.stdout.write('fake agent answer');
 };
 if (process.stdin.isTTY || process.stdin.readableEnded) done();

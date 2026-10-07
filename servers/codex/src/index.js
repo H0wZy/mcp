@@ -1,8 +1,6 @@
 // H0wZy/mcp — OpenAI Codex MCP Server
 // Minimal, DRY bridge exposing OpenAI Codex CLI (GPT-6 family) to any MCP client.
 
-import { dirname } from 'node:path';
-
 // Installed from npm, @h0wzy/mcp-shared is a real dependency. Run straight from a
 // clone without `npm install`, fall back to the workspace copy of shared/.
 const shared = await import('@h0wzy/mcp-shared').catch((err) => {
@@ -134,12 +132,9 @@ async function executeCodexCommand(
   ];
 
   if (subcommand === 'exec') {
+    // No --add-dir for context paths: it makes a folder *writable* (codex exec --help),
+    // and both sandboxes can already read the whole disk.
     args.push('--color', 'never', ...extraArgs);
-
-    for (const p of contextPaths) {
-      if (p.isDir !== null) args.push('--add-dir', p.isDir ? p.path : dirname(p.path));
-    }
-
     if (workDir) args.push('-C', workDir);
   }
 

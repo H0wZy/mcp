@@ -197,7 +197,7 @@ To keep resource and quota consumption under strict developer control, set optio
 
 > **Delegation tools write to disk.** `delegate_codex` and `delegate_antigravity` run the agent inside the given `cwd` and may create or modify files. They never commit for you: always review the resulting diff (`git diff`) before keeping the changes.
 >
-> **Startup defaults:** Antigravity tools default to `Gemini 3.8 Flash (High)` (override with `AGY_MODEL` / `AGY_EFFORT`). Codex tools default to `gpt-6-astra` at `medium` effort (override with `CODEX_MODEL` / `CODEX_EFFORT`). Codex's read-only tools run in Codex's `read-only` sandbox; only `delegate_codex` can write.
+> **Startup defaults:** Antigravity tools default to `Gemini 3.8 Flash (High)` (override with `AGY_MODEL` / `AGY_EFFORT`). Codex tools default to `gpt-6-astra` at `medium` effort (override with `CODEX_MODEL` / `CODEX_EFFORT`). Codex's read-only tools run in Codex's `read-only` sandbox, and Antigravity's run without auto-approval, so actions that need approval are skipped; only the `delegate_*` tools can write.
 
 
 ---

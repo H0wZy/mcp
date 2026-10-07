@@ -92,6 +92,17 @@ test('review_codex applies the same read-only overrides to the review subcommand
   ]);
 });
 
+test('codex context paths go into the prompt, never into --add-dir (which grants writes)', async () => {
+  await withLog(codexFake, () => callTool(codex, 'ask_codex', { prompt: 'read it', paths: [work] }));
+  let call = lastCall(codexFake);
+  assert.equal(call.argv.includes('--add-dir'), false, call.argv.join(' '));
+  assert.ok(call.input.includes(`- ${work}`), call.input);
+
+  await withLog(codexFake, () => callTool(codex, 'delegate_codex', { prompt: 'do it', cwd: work, paths: [tmpdir()] }));
+  call = lastCall(codexFake);
+  assert.equal(call.argv.includes('--add-dir'), false, call.argv.join(' '));
+});
+
 test('per-call model and effort overrides reach codex without changing the session', async () => {
   await withLog(codexFake, () => callTool(codex, 'plan_codex', { prompt: 'plan it', model: 'gpt-6-luna', effort: 'high' }));
   const { argv } = lastCall(codexFake);
@@ -113,7 +124,7 @@ test('delegate_codex writes inside cwd only and keeps automatic approvals', asyn
   assert.ok(samePath(cwd, work), `${cwd} vs ${work}`);
 });
 
-test('ask_antigravity passes the catalog variant id instead of a separate --effort', async () => {
+test('ask_antigravity passes the catalog variant id and does not auto-approve anything', async () => {
   const result = await withLog(agyFake, () => callTool(agy, 'ask_antigravity', { prompt: 'say hi' }));
   assert.equal(result.isError, false, result.content[0].text);
   const { argv } = lastCall(agyFake);
@@ -121,8 +132,46 @@ test('ask_antigravity passes the catalog variant id instead of a separate --effo
     '-p', 'say hi',
     '--model', 'gemini-3.8-flash-high',
     '--print-timeout', '5m',
-    '--dangerously-skip-permissions',
   ]);
+});
+
+test('read-only antigravity tools add context folders for reading and surface soft-denied actions', async () => {
+  process.env.FAKE_AGENT_STDERR = 'Skipped write_file: not allowed. Add write_file(src/) to permissions.allow';
+  let result;
+  try {
+    result = await withLog(agyFake, () => callTool(agy, 'review_antigravity', { prompt: 'review', paths: [work] }));
+  } finally {
+    delete process.env.FAKE_AGENT_STDERR;
+  }
+  assert.equal(result.isError, false, result.content[0].text);
+  const { argv } = lastCall(agyFake);
+  assert.equal(argv.includes('--dangerously-skip-permissions'), false, argv.join(' '));
+  assert.deepEqual(argv.slice(argv.indexOf('--add-dir'), argv.indexOf('--add-dir') + 2), ['--add-dir', work]);
+  assert.match(result.content[0].text, /fake agent answer\n\n⚠️ Antigravity notices \(stderr\):\nSkipped write_file/);
+  assert.match(result.content[0].text, /\[antigravity · model=/);
+});
+
+test('only edit-capable tools are annotated as writing', async () => {
+  for (const server of [codex, agy]) {
+    let reply;
+    const originalWrite = process.stdout.write;
+    process.stdout.write = (chunk, ...rest) => {
+      const text = chunk.toString();
+      if (!text.startsWith('{"jsonrpc"')) return originalWrite.call(process.stdout, chunk, ...rest);
+      reply = JSON.parse(text.trim());
+      return true;
+    };
+    try {
+      await server.handleMessage({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+    for (const tool of reply.result.tools) {
+      const readOnly = /^(ask|review|brainstorm|plan)_/.test(tool.name);
+      if (readOnly) assert.equal(tool.annotations?.readOnlyHint, true, tool.name);
+      if (tool.name.startsWith('delegate_')) assert.equal(tool.annotations?.destructiveHint, true, tool.name);
+    }
+  }
 });
 
 test('delegate_antigravity sends --effort for models without a variant and scopes to cwd', async () => {
@@ -133,6 +182,7 @@ test('delegate_antigravity sends --effort for models without a variant and scope
   assert.deepEqual(argv.slice(argv.indexOf('--model'), argv.indexOf('--model') + 2), ['--model', 'custom-model']);
   assert.deepEqual(argv.slice(argv.indexOf('--effort'), argv.indexOf('--effort') + 2), ['--effort', 'xhigh']);
   assert.deepEqual(argv.slice(argv.indexOf('--print-timeout'), argv.indexOf('--print-timeout') + 2), ['--print-timeout', '30m']);
+  assert.ok(argv.includes('--dangerously-skip-permissions'), argv.join(' '));
   assert.deepEqual(argv.slice(argv.indexOf('--add-dir'), argv.indexOf('--add-dir') + 2), ['--add-dir', work]);
   assert.ok(samePath(cwd, work), `${cwd} vs ${work}`);
 });

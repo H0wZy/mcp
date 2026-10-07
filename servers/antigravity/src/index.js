@@ -14,6 +14,7 @@ const {
   resolveBinary,
   executeProcess,
   formatResilientResponse,
+  sanitizeOutput,
   createAgentConfig,
   validateCwd,
   normalizePaths,
@@ -21,6 +22,8 @@ const {
 } = shared;
 
 const TIMEOUT_MS = 300000; // 5 minutes
+const STDERR_NOTICE_CHARS = 1500;
+const READ_ONLY_ANNOTATIONS = { readOnlyHint: true, openWorldHint: true };
 
 async function loadAgyCatalog() {
   const agyBin = resolveBinary('agy', 'AGY_BIN');
@@ -75,7 +78,22 @@ export const agentConfig = createAgentConfig({
   catalogTimeoutMs: 45000,
 });
 
-async function executeAgyPrompt({ prompt, prefix = '', paths, model, effort, cwd, requireCwd = false, timeoutMinutes = 5, signal }) {
+// Without --dangerously-skip-permissions, print mode soft-denies every action that
+// needs approval (file edits, and shell commands or MCP tools the user hasn't allowed):
+// the run goes on, exits 0 and names the skipped tool on stderr
+// (https://antigravity.google/docs/cli/headless/). Only delegate_* auto-approves.
+async function executeAgyPrompt({
+  prompt,
+  prefix = '',
+  paths,
+  model,
+  effort,
+  cwd,
+  requireCwd = false,
+  autoApprove = false,
+  timeoutMinutes = 5,
+  signal,
+}) {
   if (!prompt) {
     return { text: 'Missing required argument: prompt', isError: true };
   }
@@ -129,8 +147,9 @@ async function executeAgyPrompt({ prompt, prefix = '', paths, model, effort, cwd
     snapshot.cliModel,
     '--print-timeout',
     `${timeoutMinutes}m`,
-    '--dangerously-skip-permissions',
   ];
+
+  if (autoApprove) args.push('--dangerously-skip-permissions');
 
   if (snapshot.cliEffort) {
     args.push('--effort', snapshot.cliEffort);
@@ -148,8 +167,14 @@ async function executeAgyPrompt({ prompt, prefix = '', paths, model, effort, cwd
   const footer = agentConfig.formatFooter(snapshot);
 
   if (res.ok) {
+    // Read-only runs report soft-denied actions on stderr; pass that on so the caller
+    // knows the answer may be incomplete and how the user can allow the action.
+    const notices = !autoApprove && res.stderr ? sanitizeOutput(res.stderr).slice(-STDERR_NOTICE_CHARS) : '';
     return {
-      text: (res.stdout || '(Antigravity completed with no output)') + footer,
+      text:
+        (res.stdout || '(Antigravity completed with no output)') +
+        (notices ? `\n\n⚠️ Antigravity notices (stderr):\n${notices}` : '') +
+        footer,
       isError: false,
     };
   }
@@ -262,7 +287,7 @@ export const askAntigravityTool = {
     '(default model: Gemini 3.8 Flash High; configure via configure_antigravity). ' +
     'A different model family than Claude or OpenAI, ensuring an unbiased cross-check. ' +
     'Provide a `prompt`; optionally pass `paths`, `model`, or `effort`.',
-  annotations: { openWorldHint: true },
+  annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
     properties: {
@@ -296,8 +321,9 @@ export const reviewAntigravityTool = {
   description:
     'Request a thorough, structured code review from Google Antigravity (default model: Gemini 3.8 Flash High). ' +
     'Inspects code correctness, edge cases, race conditions, security vulnerabilities, performance, and architecture. ' +
-    'Use tier "deep" via configure_antigravity for complex security/architecture reviews.',
-  annotations: { openWorldHint: true },
+    'Use tier "deep" via configure_antigravity for complex security/architecture reviews. ' +
+    'Read-only: it cannot edit files, and shell commands the user has not allowed are skipped, so pass the files to review in `paths`.',
+  annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
     properties: {
@@ -341,7 +367,7 @@ export const brainstormAntigravityTool = {
     'Architectural brainstorming and exploration with Google Antigravity. ' +
     'Explores alternative design patterns, trade-offs, scalability considerations, and pros/cons. ' +
     'Configure model and effort via configure_antigravity.',
-  annotations: { openWorldHint: true },
+  annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
     properties: {
@@ -384,7 +410,7 @@ export const planAntigravityTool = {
   description:
     'Generate a step-by-step implementation plan or execution checklist using Google Antigravity. ' +
     'Configure model and effort via configure_antigravity.',
-  annotations: { openWorldHint: true },
+  annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
     properties: {
@@ -453,6 +479,7 @@ export const delegateAntigravityTool = {
       effort,
       cwd,
       requireCwd: true,
+      autoApprove: true,
       timeoutMinutes: clampTimeoutMinutes(timeout_minutes),
       signal: ctx?.signal,
     }),
