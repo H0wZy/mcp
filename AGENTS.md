@@ -12,6 +12,8 @@ H0wZy/mcp connects the three leading coding agents (Claude Code, Codex, Antigrav
 |---|---|
 | `shared/` | Zero-dependency core used by every server: `server.js` (JSON-RPC 2.0 stdio loop), `executor.js` (child process runner), `resolver.js` (binary lookup, PATHEXT), `errors.js` (resilient errors + secret redaction), `agent-config.js` (model / effort / tiers, spec 005), `configure-tool.js` (the shared `configure_*` tool), `chain-guard.js` + `ancestry.js` + `l1.js` (loop guard, spec 006) |
 | `servers/codex/`, `servers/antigravity/`, `servers/claude/` | One MCP server per target agent. Same tool family on each: `ask_*`, `review_*`, `brainstorm_*`, `plan_*`, `delegate_*`, `configure_*` |
+| `servers/team/`, `shared/team/` | Agent team orchestrator (spec 007): `team_*` / `task_*` tools in the server; the engine (store, task graph, report parser, per-vendor turn adapters, scheduler) in `shared/team/` |
+| `cli/skills/agent-team/SKILL.md` | The `agent-team` skill. `hmcp` embeds it and copies it to each harness's skill folder |
 | `cli/` | Go CLI `hmcp` (cobra + charmbracelet): installs bridges into host configs, plus `doctor`, `list`, `upgrade`, `version`, TUI |
 | `npm/` | npm wrapper `@h0wzy/mcp` that runs the Go binary |
 | `test/`, `shared/test/` | Node test suites (`node:test`) |
@@ -47,7 +49,7 @@ Rules:
 - If a `research.md` already exists when you run `speckit-plan`, extend it. Don't replace it.
 - `.specify/memory/constitution.md` is still the unfilled template. Until it is ratified (`speckit-constitution`), use the rules in this file as the project principles.
 
-Current roadmap: `005` model / effort control, `006` bidirectional mesh + loop guard (implemented), `007` multi-vendor agent team orchestrator. All three ship in v1.0.6.
+Current roadmap: `005` model / effort control, `006` bidirectional mesh + loop guard, and `007` multi-vendor agent team orchestrator are all implemented and ship together in v1.0.6. Next candidates: Option C peer tools for teammates (spec 007 research), and Codex session resume once its JSON thread id is verified.
 
 ## Coding rules
 
@@ -98,12 +100,12 @@ This repo builds bridges between agents. You may yourself be running *inside* a 
 - Latest published release: **v1.0.5** (commit `5cacc64`). Next release: **v1.0.6**, which ships specs 005 + 006 + 007 together.
 - A **new** npm package, such as `@h0wzy/mcp-server-claude`, must be published once by hand before CI can publish it. npm trusted publishing (OIDC) is configured per existing package.
 - All packages share one version. A release bump must update **every** one of these:
-  - `package.json`, `shared/package.json`, `servers/codex/package.json`, `servers/antigravity/package.json`, `servers/claude/package.json`, `npm/package.json` (plus any new `servers/*/package.json`), including each server's `@h0wzy/mcp-shared` dependency version
+  - `package.json`, `shared/package.json`, `servers/codex/package.json`, `servers/antigravity/package.json`, `servers/claude/package.json`, `servers/team/package.json`, `npm/package.json` (plus any new `servers/*/package.json`), including each server's `@h0wzy/mcp-shared` dependency version
   - the `version` passed to `createMcpServer` in each `servers/*/src/index.js`
   - `cli/version/version.go` → `Current` (a `var`, because release builds overwrite it with goreleaser `-ldflags -X`)
   - the fallback version constants in `npm/bin/h0wzy-mcp.js`
   - the version and download links in `README.md` → "Precompiled Standalone Binaries"
-- Publishing to npm runs on a **published GitHub Release** (`.github/workflows/publish-packages.yml`, OIDC trusted publishing). Pushing to `main` does not publish.
+- Publishing to npm runs on a **published GitHub Release** (`.github/workflows/publish-packages.yml`, OIDC trusted publishing). The same workflow builds the `hmcp` binaries and attaches them to the release as `h0wzy-mcp-<os>-<arch>`, which is what the npm wrapper downloads. Pushing to `main` does not publish.
 
 ## Commits and branches
 

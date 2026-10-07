@@ -44,3 +44,44 @@ jobs:
               npm publish "./$dir" --access public --provenance
             fi
           done
+
+  # The npm wrapper (@h0wzy/mcp) downloads h0wzy-mcp-<os>-<arch> from the release whose
+  # tag matches its version, and falls back to an old release when the asset is missing.
+  release-binaries:
+    name: 🐹 Attach CLI binaries to the release
+    if: github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+          cache-dependency-path: 'cli/go.sum'
+
+      - name: Run Go tests
+        run: go test ./cli/...
+
+      - name: Build binaries with the release version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          ldflags="-s -w -X github.com/H0wZy/mcp/cli/version.Current=${version}"
+          mkdir -p dist
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$ldflags" -o dist/h0wzy-mcp-windows-amd64.exe ./cli
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$ldflags" -o dist/h0wzy-mcp-linux-amd64 ./cli
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "$ldflags" -o dist/h0wzy-mcp-darwin-arm64 ./cli
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$ldflags" -o dist/h0wzy-mcp-darwin-amd64 ./cli
+          (cd dist && sha256sum * > checksums.txt)
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" dist/* --clobber --repo "${{ github.repository }}"

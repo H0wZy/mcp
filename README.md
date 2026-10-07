@@ -97,13 +97,13 @@ go run ./cli setup-path
 hmcp
 ```
 
-#### 📦 Precompiled Standalone Binaries (v1.0.3)
+#### 📦 Precompiled Standalone Binaries (v1.0.6)
 
 Download zero-dependency native binaries directly from [Releases](https://github.com/H0wZy/mcp/releases):
-- 🪟 **Windows (`amd64`):** [`h0wzy-mcp-windows-amd64.exe`](https://github.com/H0wZy/mcp/releases/download/v1.0.3/h0wzy-mcp-windows-amd64.exe)
-- 🐧 **Linux (`amd64`):** [`h0wzy-mcp-linux-amd64`](https://github.com/H0wZy/mcp/releases/download/v1.0.3/h0wzy-mcp-linux-amd64)
-- 🍏 **macOS Apple Silicon (`arm64`):** [`h0wzy-mcp-darwin-arm64`](https://github.com/H0wZy/mcp/releases/download/v1.0.3/h0wzy-mcp-darwin-arm64)
-- 🍏 **macOS Intel (`amd64`):** [`h0wzy-mcp-darwin-amd64`](https://github.com/H0wZy/mcp/releases/download/v1.0.3/h0wzy-mcp-darwin-amd64)
+- 🪟 **Windows (`amd64`):** [`h0wzy-mcp-windows-amd64.exe`](https://github.com/H0wZy/mcp/releases/download/v1.0.6/h0wzy-mcp-windows-amd64.exe)
+- 🐧 **Linux (`amd64`):** [`h0wzy-mcp-linux-amd64`](https://github.com/H0wZy/mcp/releases/download/v1.0.6/h0wzy-mcp-linux-amd64)
+- 🍏 **macOS Apple Silicon (`arm64`):** [`h0wzy-mcp-darwin-arm64`](https://github.com/H0wZy/mcp/releases/download/v1.0.6/h0wzy-mcp-darwin-arm64)
+- 🍏 **macOS Intel (`amd64`):** [`h0wzy-mcp-darwin-amd64`](https://github.com/H0wZy/mcp/releases/download/v1.0.6/h0wzy-mcp-darwin-amd64)
 
 The CLI will scan your system:
 ```text
@@ -236,9 +236,30 @@ With bridges in every direction, Codex can ask Antigravity, which asks Claude, w
 
 ---
 
-## 🗺️ Roadmap / Future
+## 👥 Agent Teams across vendors (spec 007)
 
-> **Idea, not implemented.** A "super orchestrator" where Claude, Codex and Antigravity share a single task list (for example GitHub Projects) and exchange messages with each other, so they can pick up, hand off and review tasks without a human relaying every step. Today they are only driven one-way through the MCP tools above.
+`@h0wzy/mcp-server-team` lets **any** of the three agents lead a team whose teammates are any mix of Claude Code, Codex and Antigravity. It works like Claude Code's Agent Teams, but across vendors:
+
+```bash
+hmcp install team   # team server in every detected CLI + the agent-team skill where each one finds skills
+```
+
+Then, in your usual interactive session:
+
+| Harness | Start a team |
+| :--- | :--- |
+| Claude Code | `/agent-team review the auth module with a Codex security reviewer and an Antigravity architect` |
+| Codex | `$agent-team …` |
+| Antigravity | `/agent-team …` |
+| Any | Plain language, e.g. "put Codex and Antigravity on this so you don't spend your own tokens" |
+
+- **Background teammates**: `team_spawn` returns at once. Each teammate has a role, a vendor and a tier, and is read-only unless spawned with `can_edit`. Editing teammates work in their own git worktree.
+- **Shared task list**: tasks have dependencies, and claims are atomic. Teammates claim the next task themselves, and the orchestrator owns every status change.
+- **Messages**: teammates message each other or the lead by name, and an idle teammate wakes for one turn.
+- **`team_wait`**: returns as soon as something happens, with compact results capped at 8,000 chars. Full outputs are read on demand with `team_result`, which keeps the lead's own token use low.
+- **Hard limits**: 3 teammates, 10 turns each, 30 in total, 60 min (`H0WZY_TEAM_*`). Every turn goes through the loop guard, and teammates can't start teams of their own.
+
+See [`servers/team/README.md`](servers/team/README.md) for every tool and setting.
 
 ---
 
