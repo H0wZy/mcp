@@ -109,6 +109,8 @@ test('messages from the lead wake an idle teammate, and unknown names list the v
   try {
     await client.call('team_create', { name: 'pair', cwd: project });
     await client.call('team_spawn', { name: 'dev', agent: 'codex', role: 'implementer' });
+    const again = await client.call('team_create', { name: 'pair', cwd: project });
+    assert.match(again.text, /^Team "pair" already exists in this session; using it\./);
     const bad = await client.call('team_message', { to: 'nobody', text: 'hi' });
     assert.equal(bad.isError, true);
     assert.match(bad.text, /No teammate 'nobody'\. Valid names: dev\./);

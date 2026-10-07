@@ -285,19 +285,21 @@ export class Team {
     return new Promise((resolvePromise) => {
       let timer;
       let batch;
-      const done = () => {
+      const finish = (deliver) => {
         clearTimeout(timer);
         clearTimeout(batch);
         this.waiters.delete(onEvent);
-        signal?.removeEventListener('abort', done);
-        resolvePromise(this.takeEvents());
+        signal?.removeEventListener('abort', onAbort);
+        // A cancelled wait sends no reply, so its events stay unread for the next wait.
+        resolvePromise(deliver ? this.takeEvents() : []);
       };
+      const onAbort = () => finish(false);
       const onEvent = () => {
-        if (!batch) batch = setTimeout(done, WAIT_BATCH_MS);
+        if (!batch) batch = setTimeout(() => finish(true), WAIT_BATCH_MS);
       };
       this.waiters.add(onEvent);
-      timer = setTimeout(done, timeoutMs);
-      signal?.addEventListener('abort', done, { once: true });
+      timer = setTimeout(() => finish(true), timeoutMs);
+      signal?.addEventListener('abort', onAbort, { once: true });
     });
   }
 

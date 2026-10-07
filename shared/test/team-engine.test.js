@@ -153,6 +153,14 @@ test('wait returns events as they happen, batched, and the lead sees the compact
     assert.match(events[0].text, /… \[400 more characters — read them with team_result\("rev#1"\)\]$/);
     assert.equal(team.store.readResult('rev#1').total, 500);
     assert.deepEqual(await team.wait(50), [], 'events are delivered once');
+
+    // A cancelled wait (the host gave up) must not swallow events.
+    const controller = new AbortController();
+    const pending = team.wait(10000, controller.signal);
+    team.emit('message', '[message] x → lead: "late"');
+    controller.abort();
+    assert.deepEqual(await pending, []);
+    assert.equal((await team.wait(0)).length, 1, 'the event is still there for the next wait');
   } finally {
     cleanup();
   }

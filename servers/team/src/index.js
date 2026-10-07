@@ -113,6 +113,11 @@ export const teamCreateTool = tool(
   ({ name, cwd, limits, self_claim }) => {
     if (isNested()) return { text: NESTED_REFUSAL, isError: true };
     const dir = cwd ? validateCwd(cwd) : process.cwd();
+    const existing = teams.get(name);
+    if (existing) {
+      currentTeam = name;
+      return ok(`Team "${name}" already exists in this session; using it.\n\n${existing.status()}`);
+    }
     const { team, resumed, notes } = Team.create({ name, cwd: dir, host, limits, selfClaim: self_claim });
     teams.set(team.name, team);
     currentTeam = team.name;
