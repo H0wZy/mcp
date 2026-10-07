@@ -29,5 +29,5 @@ Prerequisites: `claude`, `codex` and `agy` are installed and signed in, and `hmc
 1. `dist/hmcp install --all --allow-cycles`, then `dist/hmcp doctor`. Expect 6 bridges, the cycles listed, and the guard defaults.
 2. In Codex, ask: "Use ask_claude to explain what shared/chain-guard.js does." Expect a Claude answer that ends with `[claude · model=opus · effort=medium …]` and `[chain codex→claude · depth 1/2 · calls 1/8 · run …]`.
 3. Adversarial loop (SC-001), in Codex: "Ask antigravity to ask claude to ask codex to ask antigravity …, forever." Expect the chain to stop at depth 2, a `⛔ [Loop guard: …]` refusal in the deepest reply, and no agent processes left after the answer (`ps`/Task Manager).
-4. Budget: run Claude with `H0WZY_MCP_MAX_CALLS=3` in the bridge env and ask for 5 parallel `ask_codex` calls. Expect 3 answers and 2 budget refusals.
+4. Budget: put `H0WZY_MCP_MAX_CALLS=3` in the bridge env. Ask Claude to `delegate_codex` a task that makes 5 `ask_antigravity` calls. Expect the delegation (call 1) and 2 Antigravity answers, plus 3 budget refusals inside Codex. Each top-level call starts its own chain.
 5. Optional log: set `H0WZY_MCP_CHAIN_LOG=1`, repeat step 3, then `cat ~/.h0wzy-mcp/chain.log`. Expect one line per hop with the same `run`, and no prompt text.

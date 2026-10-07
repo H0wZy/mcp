@@ -18,6 +18,9 @@
     "./errors": "./errors.js",
     "./agent-config": "./agent-config.js",
     "./validate": "./validate.js",
+    "./chain-guard": "./chain-guard.js",
+    "./ancestry": "./ancestry.js",
+    "./l1": "./l1.js",
     ".": "./index.js"
   },
   "author": "Marcos (H0wZy) <h0wzymarcos@gmail.com>",

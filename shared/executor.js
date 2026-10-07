@@ -127,6 +127,7 @@ function finalizeOutput(text, truncated, max) {
  * @param {string} [options.input] Text written to stdin (keeps long prompts out of argv, which cmd.exe re-splits)
  * @param {AbortSignal} [options.signal] Aborting kills the process tree (e.g. on MCP notifications/cancelled)
  * @param {number} [options.maxOutputChars] Per-stream cap; the tail is kept, since agents print their answer last
+ * @param {(child: import('node:child_process').ChildProcess) => void} [options.onSpawn] Called once right after a successful spawn (e.g. to register the agent's pid)
  * @returns {Promise<{ exitCode: number, stdout: string, stderr: string, ok: boolean, timedOut: boolean, cancelled: boolean }>}
  */
 export function executeProcess(command, args = [], options = {}) {
@@ -138,6 +139,7 @@ export function executeProcess(command, args = [], options = {}) {
       input,
       signal,
       maxOutputChars = DEFAULT_MAX_OUTPUT_CHARS,
+      onSpawn,
     } = options;
     const timeoutMs =
       Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? options.timeoutMs : DEFAULT_TIMEOUT_MS;
@@ -202,6 +204,13 @@ export function executeProcess(command, args = [], options = {}) {
       return;
     }
     activeChildren.add(child);
+    if (onSpawn && child.pid) {
+      try {
+        onSpawn(child);
+      } catch {
+        /* a failing observer must not break the call */
+      }
+    }
 
     const onAbort = () => {
       cancelled = true;

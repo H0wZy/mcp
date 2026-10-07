@@ -16,6 +16,7 @@ const {
   formatResilientResponse,
   sanitizeOutput,
   createAgentConfig,
+  noBridgeArgs,
   validateCwd,
   normalizePaths,
   clampTimeoutMinutes,
@@ -97,6 +98,7 @@ async function executeAgyPrompt({
   autoApprove = false,
   timeoutMinutes = 5,
   signal,
+  hop,
 }) {
   if (!prompt) {
     return { text: 'Missing required argument: prompt', isError: true };
@@ -143,7 +145,11 @@ async function executeAgyPrompt({
   const withContext = contextPaths.length
     ? `Context files/folders to read and consider in full:\n${contextPaths.map((p) => `- ${p.path}`).join('\n')}\n\n${formattedPrompt}`
     : formattedPrompt;
-  const fullPrompt = autoApprove ? withContext : `${READ_ONLY_NOTICE}\n\n${withContext}`;
+  const guarded = autoApprove ? withContext : `${READ_ONLY_NOTICE}\n\n${withContext}`;
+  // L3: tell the agent where it sits in the chain (spec 006).
+  const fullPrompt = hop ? `${hop.notice}\n\n${guarded}` : guarded;
+  // A child never outlives its chain: cap the run, rounded down to whole minutes.
+  const minutes = hop ? Math.max(1, Math.min(timeoutMinutes, Math.floor(hop.remainingMs() / 60000))) : timeoutMinutes;
 
   const args = [
     '-p',
@@ -151,8 +157,11 @@ async function executeAgyPrompt({
     '--model',
     snapshot.cliModel,
     '--print-timeout',
-    `${timeoutMinutes}m`,
+    `${minutes}m`,
   ];
+
+  // L1: agy has no per-call MCP switch; at least stop prompt-driven skill expansion.
+  if (hop?.atMaxDepth) args.push(...noBridgeArgs('antigravity'));
 
   if (autoApprove) args.push('--dangerously-skip-permissions');
 
@@ -165,9 +174,11 @@ async function executeAgyPrompt({
   const res = await executeProcess(agyBin, args, {
     cwd: workDir,
     // Outlive --print-timeout so agy can return its partial output itself.
-    timeoutMs: timeoutMinutes * 60000 + 30000,
+    timeoutMs: minutes * 60000 + 30000,
     signal,
     toolName: 'agy',
+    env: hop?.childEnv,
+    onSpawn: hop ? (child) => hop.registerAgent(child.pid) : undefined,
   });
 
   const footer = agentConfig.formatFooter(snapshot);
@@ -195,6 +206,7 @@ async function executeAgyPrompt({
   return {
     text: formatted.text + footer,
     isError: true,
+    outcome: res.timedOut ? 'timed-out' : 'failed',
   };
 }
 
@@ -289,6 +301,7 @@ export const configureAntigravityTool = {
 
 export const askAntigravityTool = {
   name: 'ask_antigravity',
+  spawnsAgent: true,
   description:
     'Get an INDEPENDENT second opinion or answer from Google Antigravity ' +
     '(default model: Gemini 3.8 Flash High; configure via configure_antigravity). ' +
@@ -320,11 +333,12 @@ export const askAntigravityTool = {
     required: ['prompt'],
   },
   handler: ({ prompt, paths, model, effort }, ctx) =>
-    executeAgyPrompt({ prompt, paths, model, effort, signal: ctx?.signal }),
+    executeAgyPrompt({ prompt, paths, model, effort, signal: ctx?.signal, hop: ctx?.hop }),
 };
 
 export const reviewAntigravityTool = {
   name: 'review_antigravity',
+  spawnsAgent: true,
   description:
     'Request a thorough, structured code review from Google Antigravity (default model: Gemini 3.8 Flash High). ' +
     'Inspects code correctness, edge cases, race conditions, security vulnerabilities, performance, and architecture. ' +
@@ -362,6 +376,7 @@ export const reviewAntigravityTool = {
       model,
       effort,
       signal: ctx?.signal,
+      hop: ctx?.hop,
       prefix:
         'You are performing a comprehensive code review. Focus on bug detection, race conditions, ' +
         'security issues, performance bottlenecks, and architectural clarity. Provide specific recommendations or diffs where helpful.',
@@ -370,6 +385,7 @@ export const reviewAntigravityTool = {
 
 export const brainstormAntigravityTool = {
   name: 'brainstorm_antigravity',
+  spawnsAgent: true,
   description:
     'Architectural brainstorming and exploration with Google Antigravity. ' +
     'Explores alternative design patterns, trade-offs, scalability considerations, and pros/cons. ' +
@@ -406,6 +422,7 @@ export const brainstormAntigravityTool = {
       model,
       effort,
       signal: ctx?.signal,
+      hop: ctx?.hop,
       prefix:
         'You are a software architect exploring system design options. Analyze the given problem, ' +
         'brainstorm 2-3 viable architectural alternatives, outline trade-offs and pros/cons for each, and recommend the best path forward.',
@@ -414,6 +431,7 @@ export const brainstormAntigravityTool = {
 
 export const planAntigravityTool = {
   name: 'plan_antigravity',
+  spawnsAgent: true,
   description:
     'Generate a step-by-step implementation plan or execution checklist using Google Antigravity. ' +
     'Configure model and effort via configure_antigravity.',
@@ -449,6 +467,7 @@ export const planAntigravityTool = {
       model,
       effort,
       signal: ctx?.signal,
+      hop: ctx?.hop,
       prefix:
         'You are a lead technical planner. Break down the requested goal into structured, ' +
         'dependency-ordered, verifiable implementation tasks with concrete file paths and test steps.',
@@ -457,6 +476,7 @@ export const planAntigravityTool = {
 
 export const delegateAntigravityTool = {
   name: 'delegate_antigravity',
+  spawnsAgent: true,
   description:
     'Hand a self-contained implementation task to Google Antigravity, which EDITS FILES inside `cwd` ' +
     '(permissions skipped). Review the diff afterwards. Returns the final report from Antigravity. ' +
@@ -489,6 +509,7 @@ export const delegateAntigravityTool = {
       autoApprove: true,
       timeoutMinutes: clampTimeoutMinutes(timeout_minutes),
       signal: ctx?.signal,
+      hop: ctx?.hop,
     }),
 };
 

@@ -1,3 +1,4 @@
+import './helpers/guard-env.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer as createAntigravityServer, agentConfig as agyConfig } from '../servers/antigravity/src/index.js';

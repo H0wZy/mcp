@@ -80,6 +80,15 @@ test('executeProcess keeps the tail of oversized output and says it was cut', as
   assert.ok(res.stdout.length < 1100);
 });
 
+test('onSpawn sees the child pid once, before the process finishes', async () => {
+  const seen = [];
+  const res = await executeProcess(process.execPath, ['-e', 'console.log(process.pid)'], {
+    onSpawn: (child) => seen.push(child.pid),
+  });
+  assert.equal(res.ok, true);
+  assert.deepEqual(seen, [Number(res.stdout)]);
+});
+
 test('executeProcess does not start anything when the signal is already aborted', async () => {
   const controller = new AbortController();
   controller.abort();

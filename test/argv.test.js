@@ -1,6 +1,7 @@
 // Asserts the exact command lines the servers hand to the agent CLIs, using fake
 // binaries. This is what actually reaches `codex` and `agy`, so it is the contract
 // that matters most for model / effort control and sandboxing.
+import './helpers/guard-env.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, realpathSync } from 'node:fs';
@@ -75,7 +76,10 @@ test('ask_codex runs read-only, never asks for approval, and sends the prompt on
     '--color', 'never',
     '--ephemeral', '--skip-git-repo-check',
   ]);
-  assert.equal(input, 'what is 2+2?');
+  // L3 chain notice first, then the prompt (spec 006).
+  assert.match(input, /^\[H0wZy\/mcp chain\] You are codex, called by host \(chain host → codex, depth 1 of 2, bridge call 1 of 8\)/);
+  assert.ok(input.endsWith('\n\nwhat is 2+2?'), input);
+  assert.match(result.content[0].text, /\n\[chain host→codex · depth 1\/2 · calls 1\/8 · run [0-9a-f]{8}\]$/);
   assert.match(result.content[0].text, /\[codex · model=gpt-6-astra · effort=medium · source=startup\]/);
 });
 
@@ -130,7 +134,8 @@ test('ask_antigravity passes the catalog variant id and does not auto-approve an
   const { argv } = lastCall(agyFake);
   assert.equal(argv.length, 6, argv.join(' '));
   assert.equal(argv[0], '-p');
-  assert.match(argv[1], /^Read-only request: do not create, edit or delete files/);
+  assert.match(argv[1], /^\[H0wZy\/mcp chain\] You are antigravity/);
+  assert.match(argv[1], /\n\nRead-only request: do not create, edit or delete files/);
   assert.ok(argv[1].endsWith('\n\nsay hi'), argv[1]);
   assert.deepEqual(argv.slice(2), ['--model', 'gemini-3.8-flash-high', '--print-timeout', '5m']);
 });

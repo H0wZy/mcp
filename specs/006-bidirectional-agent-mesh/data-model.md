@@ -15,7 +15,7 @@ The effective loop-guard limits.
 
 Validation:
 - A value that isn't a number, or is below 1, falls back to the default.
-- Values above the cap are clamped, and the clamp is reported in the trace (`depth 2/4*` plus a warning line).
+- Values above the cap are clamped. The clamp is reported as a `⚠️` line right after the trace line.
 - A nested bridge uses `min(chain policy, own policy)` field by field. `allowRevisit` is true only if both say so.
 
 ## Chain

@@ -81,7 +81,7 @@ Besides depth, each chain has a total call budget and a deadline. A nested call 
 
 **Why this priority**: Depth limits stop infinite loops. They do not stop a wide fan-out, where one agent fires many sibling calls, or a slow chain that runs for an hour. Budgets close that gap. They come after Story 1 because depth limits already prevent the worst case.
 
-**Independent Test**: Set a chain budget of 3 calls. Have the top-level agent make 5 sibling calls to other agents. Check that the first 3 run, that calls 4 and 5 are refused with a budget message, and that each response shows the remaining budget.
+**Independent Test**: Set a chain budget of 3 calls. Delegate one task to an agent and have that agent make 5 sibling calls to other agents. Check that the delegation plus the first 2 siblings run, that the other 3 are refused with a budget message, and that each response shows how much of the budget is used.
 
 **Acceptance Scenarios**:
 
@@ -208,6 +208,7 @@ Every bridge response ends with a short trace line, for example `[chain claudeâ†
 ## Assumptions
 
 - **Default limits**: max depth 2 (hard cap 4), no revisits, chain budget 8 calls (hard cap 32), and a default chain deadline of 60 minutes. A depth of 2 covers "A asks B, and B asks C for a quick check". That is the deepest useful chain for second opinions and reviews. Anything deeper is almost always waste.
+- **One chain per top-level call**: Each call the developer's own agent makes starts a new chain with a full budget and deadline. The budget bounds the unsupervised tree below that call, where loops and fan-out happen. A session-wide chain would make a long interactive session hit its deadline, and the developer already sees every top-level call.
 - **Where limits are set**: As with spec 005's ceilings, the developer sets limits outside the conversation (environment / host configuration). An agent can't raise its own limits through a tool call.
 - **Claude Code tiers** (see Clarifications): light = `sonnet` at `low`; balanced = `opus` at `medium`; deep = `fable` at `high`. The bridge uses Claude Code's model aliases so it doesn't break on every model release.
 - **Read-only means read-only**: Read-only tools on all three bridges should get the same guarantee as `*_claude` (FR-014). Codex and Antigravity read-only tools currently run with automatic approvals (see the review findings). Aligning them is a related fix, best done during this feature's planning.

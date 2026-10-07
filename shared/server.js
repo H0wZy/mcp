@@ -4,6 +4,7 @@
 import readline from 'node:readline';
 import { formatResilientResponse } from './errors.js';
 import { killAllChildren } from './executor.js';
+import { agentName, beginHop, logRefusal } from './chain-guard.js';
 
 // Newest first. A client asking for anything else gets the newest one we speak.
 export const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
@@ -14,8 +15,26 @@ export const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11
  * @property {string} description
  * @property {Object} inputSchema
  * @property {Object} [annotations] MCP tool hints (readOnlyHint, destructiveHint, idempotentHint, openWorldHint)
- * @property {(args: any, context: { signal: AbortSignal }) => Promise<{ text: string, isError?: boolean } | string>} handler
+ * @property {boolean} [spawnsAgent] Starts an agent: the loop guard decides first and the handler gets `context.hop`
+ * @property {string} [agent] Agent the tool starts (defaults to the server name)
+ * @property {(args: any, context: { signal: AbortSignal, hop?: object }) => Promise<{ text: string, isError?: boolean, outcome?: string } | string>} handler
  */
+
+/**
+ * Name of the agent hosting this bridge: `--host <name>` / `--host=<name>` in the launch
+ * arguments (written by `hmcp install`), else H0WZY_MCP_HOST, else "host".
+ *
+ * @param {string[]} [argv=process.argv]
+ * @param {NodeJS.ProcessEnv} [env=process.env]
+ * @returns {string}
+ */
+export function resolveHost(argv = process.argv, env = process.env) {
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--host' && argv[i + 1]) return agentName(argv[i + 1]);
+    if (argv[i].startsWith('--host=')) return agentName(argv[i].slice('--host='.length));
+  }
+  return env.H0WZY_MCP_HOST ? agentName(env.H0WZY_MCP_HOST) : 'host';
+}
 
 /**
  * Creates an MCP server instance over stdio.
@@ -24,9 +43,11 @@ export const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11
  * @param {string} config.name Server name (e.g. "antigravity", "codex")
  * @param {string} config.version Server semantic version
  * @param {MCPTool[]} config.tools Tools exposed by this server
+ * @param {string} [config.host] Agent hosting this bridge (default: resolveHost())
  * @returns {{ start: () => void, handleMessage: (msg: any) => Promise<any> }}
  */
-export function createMcpServer({ name, version, tools = [] }) {
+export function createMcpServer({ name, version, tools = [], host }) {
+  const hostName = host ? agentName(host) : resolveHost();
   const toolMap = new Map(tools.map((t) => [t.name, t]));
   // Requests still running, so notifications/cancelled and shutdown can stop them.
   const inFlight = new Map();
@@ -87,36 +108,57 @@ export function createMcpServer({ name, version, tools = [] }) {
           return fail(id, -32602, `Unknown tool: ${toolName}`);
         }
 
+        // Loop guard (spec 006): decide before anything is started.
+        let hop;
+        if (tool.spawnsAgent) {
+          const target = tool.agent || name;
+          const decision = beginHop({ target, tool: tool.name, host: hostName });
+          if (!decision.ok) {
+            logRefusal({ refusal: decision.refusal, target, tool: tool.name });
+            return ok(id, { content: [{ type: 'text', text: decision.refusal.text }], isError: true });
+          }
+          hop = decision.hop;
+        }
+        const withTrace = (text) => {
+          if (!hop) return text;
+          const warnings = hop.warnings.length ? `\n⚠️ ${hop.warnings.join('\n⚠️ ')}` : '';
+          return `${text}\n${hop.trace()}${warnings}`;
+        };
+
         const controller = new AbortController();
         if (id !== undefined) inFlight.set(id, controller);
+        let outcome = 'failed';
 
         try {
-          const result = await tool.handler(args, { signal: controller.signal });
+          const result = await tool.handler(args, { signal: controller.signal, hop });
           // A cancelled request gets no response (MCP cancellation rules).
-          if (controller.signal.aborted) return;
-          if (typeof result === 'string') {
-            return ok(id, {
-              content: [{ type: 'text', text: result }],
-              isError: false,
-            });
+          if (controller.signal.aborted) {
+            outcome = 'cancelled';
+            return;
           }
-
+          const text = typeof result === 'string' ? result : result.text || '';
+          const isError = typeof result === 'string' ? false : Boolean(result.isError);
+          outcome = (typeof result === 'object' && result.outcome) || (isError ? 'failed' : 'ran');
           return ok(id, {
-            content: [{ type: 'text', text: result.text || '' }],
-            isError: Boolean(result.isError),
+            content: [{ type: 'text', text: withTrace(text) }],
+            isError,
           });
         } catch (err) {
-          if (controller.signal.aborted) return;
+          if (controller.signal.aborted) {
+            outcome = 'cancelled';
+            return;
+          }
           const formatted = formatResilientResponse({
             provider: name,
             rawOutput: err?.message || String(err),
           });
           return ok(id, {
-            content: [{ type: 'text', text: formatted.text }],
+            content: [{ type: 'text', text: withTrace(formatted.text) }],
             isError: true,
           });
         } finally {
           inFlight.delete(id);
+          hop?.finish(outcome);
         }
       }
 

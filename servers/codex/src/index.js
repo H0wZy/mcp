@@ -13,6 +13,7 @@ const {
   executeProcess,
   formatResilientResponse,
   createAgentConfig,
+  noBridgeArgs,
   validateCwd,
   normalizePaths,
   clampTimeoutMinutes,
@@ -78,7 +79,7 @@ async function executeCodexCommand(
   model,
   effort,
   extraArgs = [],
-  { cwd, requireCwd = false, access = 'read-only', timeoutMs = TIMEOUT_MS, signal } = {}
+  { cwd, requireCwd = false, access = 'read-only', timeoutMs = TIMEOUT_MS, signal, hop } = {}
 ) {
   if (!prompt) {
     return { text: 'Missing required argument: prompt', isError: true };
@@ -115,9 +116,11 @@ async function executeCodexCommand(
     };
   }
 
-  const fullPrompt = contextPaths.length
+  const withContext = contextPaths.length
     ? `Context files/directories to inspect in full:\n${contextPaths.map((p) => `- ${p.path}`).join('\n')}\n\n${prompt}`
     : prompt;
+  // L3: tell the agent where it sits in the chain (spec 006).
+  const fullPrompt = hop ? `${hop.notice}\n\n${withContext}` : withContext;
 
   // For all subcommands, override model and reasoning effort via -c key=value
   const args = [
@@ -128,6 +131,8 @@ async function executeCodexCommand(
     '-c',
     `model_reasoning_effort=${snapshot.cliEffort}`,
     ...ACCESS_OVERRIDES[access],
+    // L1: at the maximum depth, start Codex with its bridge servers switched off.
+    ...(hop?.atMaxDepth ? noBridgeArgs('codex') : []),
     '-',
   ];
 
@@ -140,10 +145,12 @@ async function executeCodexCommand(
 
   const res = await executeProcess(codexBin, args, {
     cwd: workDir,
-    timeoutMs,
+    timeoutMs: hop ? hop.capTimeoutMs(timeoutMs) : timeoutMs,
     signal,
     toolName: 'codex',
     input: fullPrompt,
+    env: hop?.childEnv,
+    onSpawn: hop ? (child) => hop.registerAgent(child.pid) : undefined,
   });
   const footer = agentConfig.formatFooter(snapshot);
 
@@ -163,6 +170,7 @@ async function executeCodexCommand(
   return {
     text: formatted.text + footer,
     isError: true,
+    outcome: res.timedOut ? 'timed-out' : 'failed',
   };
 }
 
@@ -257,6 +265,7 @@ export const configureCodexTool = {
 
 export const askCodexTool = {
   name: 'ask_codex',
+  spawnsAgent: true,
   description:
     'Ask OpenAI Codex CLI for an independent second opinion, reasoning check, or advice (read-only sandbox). ' +
     'Uses session-configured model & effort by default (configure via configure_codex). ' +
@@ -294,12 +303,13 @@ export const askCodexTool = {
       model,
       effort,
       READ_ONLY_EXEC_ARGS,
-      { signal: ctx?.signal }
+      { signal: ctx?.signal, hop: ctx?.hop }
     ),
 };
 
 export const reviewCodexTool = {
   name: 'review_codex',
+  spawnsAgent: true,
   description:
     'Run a structured code review using OpenAI Codex CLI against the current repository or specified files (read-only sandbox). ' +
     'Uses session-configured model & effort by default (configure via configure_codex).',
@@ -329,11 +339,12 @@ export const reviewCodexTool = {
     required: ['prompt'],
   },
   handler: ({ prompt, paths, model, effort }, ctx) =>
-    executeCodexCommand('review', prompt, paths, model, effort, [], { signal: ctx?.signal }),
+    executeCodexCommand('review', prompt, paths, model, effort, [], { signal: ctx?.signal, hop: ctx?.hop }),
 };
 
 export const brainstormCodexTool = {
   name: 'brainstorm_codex',
+  spawnsAgent: true,
   description:
     'Architectural brainstorming and ideation using OpenAI Codex. ' +
     'Explores alternative patterns, system trade-offs, and design approaches. ' +
@@ -371,12 +382,13 @@ export const brainstormCodexTool = {
       model,
       effort,
       READ_ONLY_EXEC_ARGS,
-      { signal: ctx?.signal }
+      { signal: ctx?.signal, hop: ctx?.hop }
     ),
 };
 
 export const planCodexTool = {
   name: 'plan_codex',
+  spawnsAgent: true,
   description:
     'Generate a structured, step-by-step implementation plan or execution checklist using OpenAI Codex. ' +
     'Configure model and effort via configure_codex.',
@@ -413,12 +425,13 @@ export const planCodexTool = {
       model,
       effort,
       READ_ONLY_EXEC_ARGS,
-      { signal: ctx?.signal }
+      { signal: ctx?.signal, hop: ctx?.hop }
     ),
 };
 
 export const delegateCodexTool = {
   name: 'delegate_codex',
+  spawnsAgent: true,
   description:
     'Hand a self-contained implementation task to OpenAI Codex, which EDITS FILES inside `cwd` ' +
     '(workspace-write sandbox, approvals routed to automatic review). Review the diff afterwards. Returns the final report from Codex. ' +
@@ -447,6 +460,7 @@ export const delegateCodexTool = {
       access: 'workspace-write',
       timeoutMs: clampTimeoutMinutes(timeout_minutes) * 60000,
       signal: ctx?.signal,
+      hop: ctx?.hop,
     }),
 };
 
