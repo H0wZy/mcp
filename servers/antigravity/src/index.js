@@ -21,7 +21,11 @@ const {
   clampTimeoutMinutes,
 } = shared;
 
-const TIMEOUT_MS = 300000; // 5 minutes
+// A blocked edit is not instant: on Windows, a print run that tried to write a file
+// sat until --print-timeout. Telling the model up front keeps read-only calls fast.
+const READ_ONLY_NOTICE =
+  'Read-only request: do not create, edit or delete files and do not run commands that change anything. ' +
+  'Those actions are blocked here and only waste time. If a change is needed, describe it in your answer.';
 const STDERR_NOTICE_CHARS = 1500;
 const READ_ONLY_ANNOTATIONS = { readOnlyHint: true, openWorldHint: true };
 
@@ -136,9 +140,10 @@ async function executeAgyPrompt({
   }
 
   const formattedPrompt = prefix ? `${prefix}\n\n${prompt}` : prompt;
-  const fullPrompt = contextPaths.length
+  const withContext = contextPaths.length
     ? `Context files/folders to read and consider in full:\n${contextPaths.map((p) => `- ${p.path}`).join('\n')}\n\n${formattedPrompt}`
     : formattedPrompt;
+  const fullPrompt = autoApprove ? withContext : `${READ_ONLY_NOTICE}\n\n${withContext}`;
 
   const args = [
     '-p',
@@ -159,7 +164,8 @@ async function executeAgyPrompt({
 
   const res = await executeProcess(agyBin, args, {
     cwd: workDir,
-    timeoutMs: workDir ? timeoutMinutes * 60000 + 30000 : TIMEOUT_MS,
+    // Outlive --print-timeout so agy can return its partial output itself.
+    timeoutMs: timeoutMinutes * 60000 + 30000,
     signal,
     toolName: 'agy',
   });
@@ -181,7 +187,8 @@ async function executeAgyPrompt({
 
   const formatted = formatResilientResponse({
     provider: 'Google Antigravity',
-    rawOutput: res.stderr || res.stdout,
+    // Keep any partial answer next to the error.
+    rawOutput: [res.stderr, res.stdout].filter(Boolean).join('\n\n'),
     exitCode: res.exitCode,
   });
 

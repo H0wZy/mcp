@@ -128,11 +128,11 @@ test('ask_antigravity passes the catalog variant id and does not auto-approve an
   const result = await withLog(agyFake, () => callTool(agy, 'ask_antigravity', { prompt: 'say hi' }));
   assert.equal(result.isError, false, result.content[0].text);
   const { argv } = lastCall(agyFake);
-  assert.deepEqual(argv, [
-    '-p', 'say hi',
-    '--model', 'gemini-3.8-flash-high',
-    '--print-timeout', '5m',
-  ]);
+  assert.equal(argv.length, 6, argv.join(' '));
+  assert.equal(argv[0], '-p');
+  assert.match(argv[1], /^Read-only request: do not create, edit or delete files/);
+  assert.ok(argv[1].endsWith('\n\nsay hi'), argv[1]);
+  assert.deepEqual(argv.slice(2), ['--model', 'gemini-3.8-flash-high', '--print-timeout', '5m']);
 });
 
 test('read-only antigravity tools add context folders for reading and surface soft-denied actions', async () => {
@@ -183,6 +183,7 @@ test('delegate_antigravity sends --effort for models without a variant and scope
   assert.deepEqual(argv.slice(argv.indexOf('--effort'), argv.indexOf('--effort') + 2), ['--effort', 'xhigh']);
   assert.deepEqual(argv.slice(argv.indexOf('--print-timeout'), argv.indexOf('--print-timeout') + 2), ['--print-timeout', '30m']);
   assert.ok(argv.includes('--dangerously-skip-permissions'), argv.join(' '));
+  assert.doesNotMatch(argv[1], /Read-only request/);
   assert.deepEqual(argv.slice(argv.indexOf('--add-dir'), argv.indexOf('--add-dir') + 2), ['--add-dir', work]);
   assert.ok(samePath(cwd, work), `${cwd} vs ${work}`);
 });
