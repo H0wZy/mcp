@@ -22,6 +22,8 @@
     "./ancestry": "./ancestry.js",
     "./l1": "./l1.js",
     "./configure-tool": "./configure-tool.js",
+    "./claude": "./claude.js",
+    "./team": "./team/index.js",
     ".": "./index.js"
   },
   "author": "Marcos (H0wZy) <h0wzymarcos@gmail.com>",

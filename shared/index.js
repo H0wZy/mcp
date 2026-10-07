@@ -9,3 +9,5 @@ export * from './chain-guard.js';
 export * from './ancestry.js';
 export * from './l1.js';
 export * from './configure-tool.js';
+export * from './claude.js';
+export * from './team/index.js';

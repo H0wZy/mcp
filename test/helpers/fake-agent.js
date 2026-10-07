@@ -2,7 +2,8 @@
 // without touching any real model. Behaviour is driven by environment variables
 // that the servers pass through to the agents they spawn (FAKE_AGENT_LOG,
 // FAKE_AGENT_MODE=sleep|bridge, FAKE_AGENT_PIDFILE, FAKE_AGENT_STDERR, FAKE_AGENT_STDOUT,
-// FAKE_AGENT_EXIT, FAKE_BRIDGE_PLAN, FAKE_AGENT_STRIP_ENV).
+// FAKE_AGENT_EXIT, FAKE_BRIDGE_PLAN, FAKE_AGENT_STRIP_ENV, FAKE_TEAMMATE_SLEEP_MS,
+// FAKE_TEAMMATE_TEXT, FAKE_TEAMMATE_WRITE).
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,6 +24,7 @@ const done = () => {
   if (process.env.FAKE_AGENT_PIDFILE) fs.writeFileSync(process.env.FAKE_AGENT_PIDFILE, String(process.pid));
   if (process.env.FAKE_AGENT_MODE === 'sleep') { setTimeout(() => {}, 60000); return; }
   if (process.env.FAKE_AGENT_MODE === 'bridge') { bridge(); return; }
+  if (process.env.FAKE_AGENT_MODE === 'teammate') { teammate(); return; }
   if (process.env.FAKE_AGENT_STDERR) process.stderr.write(process.env.FAKE_AGENT_STDERR);
   process.stdout.write(process.env.FAKE_AGENT_STDOUT || 'fake agent answer');
   if (process.env.FAKE_AGENT_EXIT) process.exitCode = Number(process.env.FAKE_AGENT_EXIT);
@@ -63,6 +65,37 @@ function bridge() {
   const send = (m) => server.stdin.write(JSON.stringify(m) + '\\n');
   send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } });
   send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: step.tool, arguments: { prompt: 'keep delegating forever' } } });
+}
+// Teammate mode (spec 007): answer like the vendor CLI would, ending with a team-report
+// block for the task named in the prompt.
+function teammate() {
+  const path = require('node:path');
+  const me = path.basename(process.argv[1]).replace(/\\.js$/, '');
+  const prompt = me === 'agy' ? (argv[argv.indexOf('-p') + 1] || '') : input;
+  const task = (prompt.match(/## Your task: (\\S+)/) || [])[1] || null;
+  const who = (prompt.match(/You are "([^"]+)"/) || [])[1] || me;
+  const fence = String.fromCharCode(96).repeat(3);
+  const extra = process.env.FAKE_TEAMMATE_TEXT || '';
+  const text = 'fake ' + who + ' worked on ' + (task || 'messages') + extra + '\\n\\n' + fence + 'team-report\\n' +
+    JSON.stringify({ status: 'done', task, summary: who + ' finished ' + (task || 'its messages') }) + '\\n' + fence;
+  const finish = () => {
+    if (me === 'claude') {
+      const i = argv.indexOf('--session-id');
+      const r = argv.indexOf('--resume');
+      const sid = i >= 0 ? argv[i + 1] : r >= 0 ? argv[r + 1] : null;
+      process.stdout.write(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: text, session_id: sid, total_cost_usd: 0.001, num_turns: 1 }));
+    } else if (me === 'agy') {
+      process.stdout.write(JSON.stringify({ conversation_id: 'conv-' + who, status: 'success', response: text, usage: { input_tokens: 10, output_tokens: 5 } }));
+    } else {
+      const o = argv.indexOf('-o');
+      if (o >= 0) fs.writeFileSync(argv[o + 1], text);
+      process.stdout.write('codex progress log');
+    }
+  };
+  if (process.env.FAKE_TEAMMATE_WRITE) fs.writeFileSync(path.join(process.cwd(), process.env.FAKE_TEAMMATE_WRITE), 'changed by ' + who + '\\n');
+  const ms = Number(process.env.FAKE_TEAMMATE_SLEEP_MS || 0);
+  if (ms) setTimeout(finish, ms);
+  else finish();
 }
 if (process.stdin.isTTY || process.stdin.readableEnded) done();
 else { process.stdin.on('end', done); process.stdin.on('error', done); setTimeout(done, 1500).unref(); }
