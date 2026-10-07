@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-06
 
-**Status**: Draft
+**Status**: Clarified (2026-10-07)
 
 **Input**: User description: "The next feature is an open-source agent orchestrator. Today Claude Code can only send a message (ask) or dispatch one task to Antigravity or Codex. I want this project to do what Claude Code's Agent Teams does — a team lead that spawns teammates, a shared task list where teammates claim tasks, and teammates that communicate with each other — but with teammates from different vendors (Claude Code, Codex, Antigravity), in any direction, without infinite loops or runaway token spend. Equal to Agent Teams or better."
 
@@ -25,6 +25,23 @@ This hub can already reach three different model families. What it lacks is ever
 - there is no way for the agents called to talk to each other.
 
 This feature adds a **vendor-neutral team orchestrator**: any of the three agents can lead, and teammates can be any mix of Claude Code, Codex and Antigravity.
+
+---
+
+## Clarifications
+
+### Session 2026-10-07
+
+The maintainer was away and asked for the work to continue without questions. Each answer below is the recommended option, chosen by the agent. Review them before release.
+
+- Q: Where is a team's state kept? → A: Outside the repository, under the guard state dir: `~/.h0wzy-mcp/teams/<project-key>/<team>/`. The project key is the project folder's name plus a short hash of its absolute path. Nothing is written into the developer's repo except git worktrees for isolated teammates, which also live under that state dir.
+- Q: How does a teammate report status, messages and claims at the end of a turn? → A: Every turn ends with one fenced `team-report` JSON block (`status`, `task`, `summary`, `messages`, `claim_next`). The orchestrator parses the last such block. The format is the same for every vendor and needs no vendor-specific structured-output flag. A turn without a valid block leaves its task as **unreported**.
+- Q: How does a teammate keep its context between turns (FR-004)? → A:
+  - Claude Code resumes its own session (`--session-id` on the first turn, `--resume` after).
+  - Antigravity continues its conversation (`--conversation <id>` from its JSON output).
+  - Codex gets a compact history of its earlier turns in the prompt. Codex resume needs a thread id from its JSON event stream, which is not yet verified against a real run.
+- Q: What is the team skill called? → A: `agent-team`. Invoke it with `/agent-team` in Claude Code and Antigravity, `$agent-team` in Codex, or ask in plain language.
+- Q: May teammates edit files by default, and where? → A: No, teammates are read-only unless spawned with `can_edit: true`. An editing teammate in a git repository works in its own worktree by default (`isolation: "worktree"`), and the lead pulls in its change set. `isolation: "none"` shares the project folder.
 
 ---
 
@@ -85,7 +102,7 @@ The lead can ask for the team's status at any moment: each teammate's state (wor
 
 ### User Story 4 - Same workflow from every harness, with each one's own trigger (Priority: P1)
 
-The developer works in whichever harness they prefer and starts or steers a team the way that harness normally invokes a skill: `/team-skill` in Claude Code, `$team-skill` in Codex, `/team-skill` in Antigravity. They can also just ask in natural language ("put Codex and Antigravity on this, I don't want to spend Claude tokens"). `@` is not used for this, because all three harnesses reserve it for referencing files.
+The developer works in whichever harness they prefer and starts or steers a team the way that harness normally invokes a skill: `/agent-team` in Claude Code, `$agent-team` in Codex, `/agent-team` in Antigravity. They can also just ask in natural language ("put Codex and Antigravity on this, I don't want to spend Claude tokens"). `@` is not used for this, because all three harnesses reserve it for referencing files.
 
 **Why this priority**: The orchestrator only helps if it fits how the developer already works in an interactive session. A command that works in one harness and not in the others breaks the "any agent can lead" promise.
 

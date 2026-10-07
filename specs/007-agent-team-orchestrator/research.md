@@ -148,3 +148,60 @@ Consequences:
 - **Required frontmatter**: Codex requires `name` and `description`. Claude Code and Antigravity require only `description`. Ship both, and keep vendor-specific fields out of the shared file (Claude Code silently ignores unknown fields; claude.ai uploads reject them).
 - **Install by copying, not symlinking**: Windows symlinks need elevated rights or developer mode. `hmcp doctor` reports drift between the copies.
 - **Skill body**: short and procedural. Cover when to form a team versus a single `ask_*` call, how to pick tiers per role to save the lead's tokens, the limits, and the `team_*` call sequence (create → spawn → wait loop → collect → shutdown).
+
+---
+
+## 8. Decisions for the plan (2026-10-07)
+
+### D1. One engine in `shared/team/`, one thin server
+
+`servers/team` only declares tools. The engine is the store, the task graph, the report parser, the adapters and the scheduler. Keeping it in `shared/team/` means a later Option C (peer tools) and any host can reuse it.
+
+### D2. Teammate turns through adapters
+
+Each adapter builds the argv for one turn and reads the output. It reuses the read-only and edit flags that Phase 0 and spec 006 settled on:
+
+| Agent | Read-only turn | Editing turn | Context across turns | Output read from |
+|---|---|---|---|---|
+| Claude Code | `--tools Read,Grep,Glob` | `--permission-mode acceptEdits` | First turn `--session-id <uuid>`, then `--resume <uuid>` | `--output-format json` → `result`, `total_cost_usd`, `num_turns` |
+| Codex | `-c sandbox_mode=read-only -c approval_policy=never --ephemeral` | `-c sandbox_mode=workspace-write --approve-for-me` | A compact history of earlier turns in the prompt | `-o <file>` (last message), plus stdout as a fallback |
+| Antigravity | No auto-approval, read-only notice | `--dangerously-skip-permissions` | `--conversation <id>` from `--output-format json` → `conversation_id` | `--output-format json` → `response`, `usage` |
+
+Every turn runs through `executeProcess` with the hop's `childEnv`, `onSpawn` registration and capped timeout. Every turn passes `--permission-prompts none` to Claude Code. Antigravity's JSON envelope fields come from the official headless docs.
+
+### D3. Turn timeout
+
+Each turn gets min(`H0WZY_TEAM_TURN_MINUTES`, default 20, cap 60; time left before the team deadline; time left in the hop's chain).
+
+### D4. Wake rules
+
+The scheduler starts a turn for a member that is idle, not stopping, within its turn budget, within the team budget and before the deadline, when:
+- **(a)** its assigned task is available (dependencies completed); or
+- **(b)** it has unread messages; or
+- **(c)** self-claim is on and an unassigned task is available. It takes the oldest available task.
+
+A `continue` report keeps the same task and schedules another turn. Every limit hit emits a `limit` event, once per member and limit.
+
+### D5. Events and waiting
+
+Events are appended to `events.jsonl` and pushed to the in-memory queue. `team_wait` returns every event since the lead's last read. When there are none, it waits until the next event or the timeout. One wait call can return several events, which keeps the lead's call count low (SC-003).
+
+### D6. Compact results
+
+The teammate's answer, minus the report block, is saved in full to `results/<member>-<turn>.md`. Events carry the report `summary`, plus the first characters of the answer up to the result cap, plus a `ref` that `team_result` reads in pages.
+
+### D7. Isolation
+
+With `can_edit: true` and a git repository:
+- `isolation: "worktree"` (the default): `git worktree add --detach <stateDir>/worktrees/<member> HEAD` once per member. Turns run there.
+- `team_changes` returns `git status --porcelain` plus `git diff --stat`, and saves the full `git diff` to a result file.
+
+`owns: [paths]`: after each turn the changed files (from `git status`) are compared with the declared paths, and anything outside them is flagged in the event.
+
+`team_shutdown` keeps worktrees, so their changes are never lost. `team_changes` with `remove: true` removes one after the lead has taken what it needs.
+
+### D8. Completion checks
+
+`task_create` can take `check: ["npm", "test"]` (an argv array, never a shell string). It runs in the member's work folder with a 10-minute limit when the teammate reports `done`.
+- **Pass**: the task completes.
+- **Fail**: the task stays in progress, the output tail (≤ 4,000 chars) goes to the teammate's mailbox, and it wakes for another turn within its budget. With no turns left, the task fails with the last output.
