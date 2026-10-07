@@ -57,7 +57,7 @@ description: "Tasks for 007 Multi-Vendor Agent Team Orchestrator"
 
 ## Phase 7: Polish
 
-- [ ] T019 Docs: README (team section, skill triggers, limits), `servers/team/README.md`, AGENTS.md layout and roadmap.
+- [x] T019 Docs: README (team section, skill triggers, limits), `servers/team/README.md`, AGENTS.md layout and roadmap.
 - [ ] T020 Run `npm test` and `go test ./cli/...`, then trigger CI on all 3 OSes.
 
 ## Dependencies
