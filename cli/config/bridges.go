@@ -236,17 +236,39 @@ func sortedKeys(m map[string]interface{}) []string {
 type codexServer struct {
 	name       string
 	command    string
+	url        string
 	args       []string
 	envVars    []string
 	hasEnvVars bool
 }
 
-// codexBridgeEdges finds bridges in a Codex config.toml. Go's RE2 regexp can't
-// express TOML, so the file is read line by line: each [mcp_servers.<name>]
-// section contributes its command, args and env_vars. Sub-tables such as
-// [mcp_servers.<name>.env] are their own sections and are ignored. Servers
-// written as inline tables are not recognized (hmcp never writes them).
+// codexBridgeEdges finds bridges in a Codex config.toml.
 func codexBridgeEdges(content, path string) ([]BridgeEdge, error) {
+	servers, err := parseCodexServers(content)
+	var edges []BridgeEdge
+	for _, s := range servers {
+		target := BridgeTarget(s.command, s.args)
+		if target == "" {
+			continue
+		}
+		ready := false
+		for _, v := range s.envVars {
+			if v == "H0WZY_MCP_CHAIN" {
+				ready = true
+			}
+		}
+		edges = append(edges, BridgeEdge{Host: AgentCodex, Target: target, Name: s.name, Scope: "user", GuardReady: ready, Path: path})
+	}
+	return edges, err
+}
+
+// parseCodexServers reads the [mcp_servers.<name>] sections of a Codex
+// config.toml. Go's RE2 regexp can't express TOML, so the file is read line by
+// line: each section contributes its command, url, args and env_vars. Sub-tables
+// such as [mcp_servers.<name>.env] are their own sections and are ignored.
+// Servers written as inline tables are not recognized (hmcp never writes them).
+// Arrays that don't parse are reported in the error; the other servers are still returned.
+func parseCodexServers(content string) ([]*codexServer, error) {
 	var servers []*codexServer
 	var current *codexServer
 	var problems []error
@@ -269,9 +291,13 @@ func codexBridgeEdges(content, path string) ([]BridgeEdge, error) {
 			continue
 		}
 		switch key {
-		case "command":
+		case "command", "url":
 			if s, _, err := parseTOMLString(value); err == nil {
-				current.command = s
+				if key == "command" {
+					current.command = s
+				} else {
+					current.url = s
+				}
 			}
 		case "args", "env_vars":
 			// Arrays may span several lines: keep adding lines until it closes.
@@ -295,21 +321,7 @@ func codexBridgeEdges(content, path string) ([]BridgeEdge, error) {
 		}
 	}
 
-	var edges []BridgeEdge
-	for _, s := range servers {
-		target := BridgeTarget(s.command, s.args)
-		if target == "" {
-			continue
-		}
-		ready := false
-		for _, v := range s.envVars {
-			if v == "H0WZY_MCP_CHAIN" {
-				ready = true
-			}
-		}
-		edges = append(edges, BridgeEdge{Host: AgentCodex, Target: target, Name: s.name, Scope: "user", GuardReady: ready, Path: path})
-	}
-	return edges, errors.Join(problems...)
+	return servers, errors.Join(problems...)
 }
 
 // splitTOMLKey splits a dotted TOML key ("mcp_servers.\"my.server\"") into its

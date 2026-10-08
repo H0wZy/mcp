@@ -14,11 +14,11 @@ H0wZy/mcp connects the three leading coding agents (Claude Code, Codex, Antigrav
 | `servers/codex/`, `servers/antigravity/`, `servers/claude/` | One MCP server per target agent. Same tool family on each: `ask_*`, `review_*`, `brainstorm_*`, `plan_*`, `delegate_*`, `configure_*` |
 | `servers/team/`, `shared/team/` | Agent team orchestrator (spec 007): `team_*` / `task_*` tools in the server; the engine (store, task graph, report parser, per-vendor turn adapters, scheduler) in `shared/team/` |
 | `cli/skills/agent-team/SKILL.md` | The `agent-team` skill. `hmcp` embeds it and copies it to each harness's skill folder |
-| `cli/` | Go CLI `hmcp` (cobra + charmbracelet): installs bridges into host configs, plus `doctor`, `list`, `upgrade`, `version`, TUI |
+| `cli/` | Go CLI `hmcp` (cobra + charmbracelet): installs bridges into host configs, plus `registry` (your own MCP servers, spec 008), `doctor`, `list`, `upgrade`, `version`, TUI |
 | `npm/` | npm wrapper `@h0wzy/mcp` that runs the Go binary |
 | `test/`, `shared/test/` | Node test suites (`node:test`) |
 | `specs/NNN-name/` | Spec-Driven Development artifacts (spec-kit) |
-| `.agents/skills/speckit-*` | spec-kit skills (specify, clarify, plan, tasks, analyze, implement, …) |
+| `.claude/skills/speckit-*` | spec-kit skills (specify, clarify, plan, tasks, analyze, implement, …) |
 | `.specify/` | spec-kit templates, scripts and constitution |
 
 ## Commands
@@ -49,7 +49,7 @@ Rules:
 - If a `research.md` already exists when you run `speckit-plan`, extend it. Don't replace it.
 - `.specify/memory/constitution.md` is still the unfilled template. Until it is ratified (`speckit-constitution`), use the rules in this file as the project principles.
 
-Current roadmap: `005` model / effort control, `006` bidirectional mesh + loop guard, and `007` multi-vendor agent team orchestrator are all implemented and ship together in v1.0.6. Next candidates: Option C peer tools for teammates (spec 007 research), and Codex session resume for teammates (the JSON `thread_id` is verified, but `codex exec resume` lacks `-C` and `--approve-for-me`; spec 007 research D9).
+Current roadmap: `005` model / effort control, `006` bidirectional mesh + loop guard, and `007` multi-vendor agent team orchestrator are all implemented and ship together in v1.0.6. `008` MCP server registry (`hmcp registry`) is implemented on branch `008-mcp-server-registry`. Next candidates: Option C peer tools for teammates (spec 007 research), and Codex session resume for teammates (the JSON `thread_id` is verified, but `codex exec resume` lacks `-C` and `--approve-for-me`; spec 007 research D9).
 
 ## Coding rules
 

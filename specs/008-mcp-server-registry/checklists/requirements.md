@@ -40,4 +40,4 @@
   - conflicts are reported, never overwritten;
   - Claude project/local scope is out of scope for the first version.
   - Revisit them in `/speckit-clarify` if needed.
-- **Open question for clarify:** should `apply` also run automatically after `add` / `update`, or stay an explicit step? The spec currently assumes an explicit apply (Story 1).
+- **Resolved in clarify (2026-10-08):** `add` / `update` / `remove` apply the affected entry right away (FR-015); `apply` re-syncs everything.
