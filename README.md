@@ -138,6 +138,11 @@ hmcp version
 # Upgrade hmcp to latest release (or 'hmcp update')
 hmcp upgrade
 
+# Windows, upgrading FROM v1.0.6 or older: those versions can't replace the running
+# hmcp.exe, yet still print "Successfully upgraded". Upgrade through another alias,
+# then check with 'hmcp version':
+h0wzy-mcp upgrade --force
+
 # Setup PATH and shims (~/.local/bin) so 'hmcp', 'hwzmcp', and 'h0wzy-mcp' work everywhere
 hmcp setup-path
 
