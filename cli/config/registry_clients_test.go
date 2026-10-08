@@ -165,7 +165,8 @@ func TestSameTarget(t *testing.T) {
 	if !sameTarget(ownedFields{URL: "http://h/x/mcp"}, ownedFields{URL: "http://h/x/mcp/"}) {
 		t.Error("trailing slash")
 	}
-	if !sameTarget(ownedFields{Command: "node", Args: []string{`a\b.js`}, EnvVars: []string{"A"}}, ownedFields{Command: "node", Args: []string{"a/b.js"}}) {
+	// Native separators match forward slashes (a\b.js on Windows; a backslash is a plain character elsewhere).
+	if !sameTarget(ownedFields{Command: "node", Args: []string{filepath.FromSlash("a/b.js")}, EnvVars: []string{"A"}}, ownedFields{Command: "node", Args: []string{"a/b.js"}}) {
 		t.Error("slashes or env_vars")
 	}
 	if sameTarget(ownedFields{Command: "node"}, ownedFields{URL: "http://h/x/mcp"}) {
