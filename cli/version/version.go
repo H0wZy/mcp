@@ -15,7 +15,7 @@ import (
 
 // Current is the CLI version. Release builds overwrite it through goreleaser's
 // -ldflags "-X github.com/H0wZy/mcp/cli/version.Current=<tag>", so it must stay a var.
-var Current = "1.0.6"
+var Current = "1.0.7"
 
 const (
 	NpmRegistry  = "https://registry.npmjs.org/@h0wzy/mcp/latest"

@@ -395,7 +395,7 @@ export const delegateCodexTool = {
 export function createServer() {
   return createMcpServer({
     name: 'codex',
-    version: '1.0.6',
+    version: '1.0.7',
     tools: [
       configureCodexTool,
       askCodexTool,

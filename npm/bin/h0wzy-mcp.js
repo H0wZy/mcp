@@ -10,7 +10,7 @@ import https from 'node:https';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkgPath = join(__dirname, '..', 'package.json');
-let pkgVersion = '1.0.6';
+let pkgVersion = '1.0.7';
 try {
   if (existsSync(pkgPath)) {
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
@@ -19,7 +19,7 @@ try {
 } catch {}
 
 const VERSION = pkgVersion;
-const FALLBACK_RELEASE = '1.0.3';
+const FALLBACK_RELEASE = '1.0.6';
 const GITHUB_REPO = 'H0wZy/mcp';
 
 const repoRoot = join(__dirname, '..', '..');

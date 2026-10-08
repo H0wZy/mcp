@@ -97,13 +97,13 @@ go run ./cli setup-path
 hmcp
 ```
 
-#### 📦 Precompiled Standalone Binaries (v1.0.6)
+#### 📦 Precompiled Standalone Binaries (v1.0.7)
 
 Download zero-dependency native binaries directly from [Releases](https://github.com/H0wZy/mcp/releases):
-- 🪟 **Windows (`amd64`):** [`h0wzy-mcp-windows-amd64.exe`](https://github.com/H0wZy/mcp/releases/download/v1.0.6/h0wzy-mcp-windows-amd64.exe)
-- 🐧 **Linux (`amd64`):** [`h0wzy-mcp-linux-amd64`](https://github.com/H0wZy/mcp/releases/download/v1.0.6/h0wzy-mcp-linux-amd64)
-- 🍏 **macOS Apple Silicon (`arm64`):** [`h0wzy-mcp-darwin-arm64`](https://github.com/H0wZy/mcp/releases/download/v1.0.6/h0wzy-mcp-darwin-arm64)
-- 🍏 **macOS Intel (`amd64`):** [`h0wzy-mcp-darwin-amd64`](https://github.com/H0wZy/mcp/releases/download/v1.0.6/h0wzy-mcp-darwin-amd64)
+- 🪟 **Windows (`amd64`):** [`h0wzy-mcp-windows-amd64.exe`](https://github.com/H0wZy/mcp/releases/download/v1.0.7/h0wzy-mcp-windows-amd64.exe)
+- 🐧 **Linux (`amd64`):** [`h0wzy-mcp-linux-amd64`](https://github.com/H0wZy/mcp/releases/download/v1.0.7/h0wzy-mcp-linux-amd64)
+- 🍏 **macOS Apple Silicon (`arm64`):** [`h0wzy-mcp-darwin-arm64`](https://github.com/H0wZy/mcp/releases/download/v1.0.7/h0wzy-mcp-darwin-arm64)
+- 🍏 **macOS Intel (`amd64`):** [`h0wzy-mcp-darwin-amd64`](https://github.com/H0wZy/mcp/releases/download/v1.0.7/h0wzy-mcp-darwin-amd64)
 
 The CLI will scan your system:
 ```text
@@ -137,6 +137,11 @@ hmcp version
 
 # Upgrade hmcp to latest release (or 'hmcp update')
 hmcp upgrade
+
+# Windows, upgrading FROM v1.0.6 or older: those versions can't replace the running
+# hmcp.exe, yet still print "Successfully upgraded". Upgrade through another alias,
+# then check with 'hmcp version':
+h0wzy-mcp upgrade --force
 
 # Setup PATH and shims (~/.local/bin) so 'hmcp', 'hwzmcp', and 'h0wzy-mcp' work everywhere
 hmcp setup-path

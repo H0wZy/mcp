@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -98,18 +99,11 @@ var upgradeCmd = &cobra.Command{
 		outFile.Close()
 
 		// Replace aliases
-		aliases := []string{"hmcp", "hwzmcp", "h0wzy-mcp"}
-		for _, alias := range aliases {
-			dst := filepath.Join(targetDir, alias)
-			if runtime.GOOS == "windows" {
-				dst += ".exe"
-			}
-			_ = copyFile(tempFile, dst)
-			if runtime.GOOS != "windows" {
-				_ = os.Chmod(dst, 0755)
-			}
-		}
+		err = installBinaryAliases(tempFile, targetDir, []string{"hmcp", "hwzmcp", "h0wzy-mcp"}, runtime.GOOS)
 		_ = os.Remove(tempFile)
+		if err != nil {
+			return fmt.Errorf("upgrade incomplete: %w", err)
+		}
 
 		fmt.Printf("\n%s Successfully upgraded %s to v%s in %s!\n",
 			successStyle.Render("✅"),
@@ -120,6 +114,42 @@ var upgradeCmd = &cobra.Command{
 
 		return nil
 	},
+}
+
+// installBinaryAliases puts src in dir under each alias. Each copy is written next to
+// its target and renamed into place, which also works while that binary runs: Unix
+// keeps the old inode for the running process, and Windows lets a running .exe be
+// renamed (to <name>.exe.old) though not overwritten. Overwriting in place failed
+// silently on Windows and left the running alias at the old version.
+func installBinaryAliases(src, dir string, aliases []string, goos string) error {
+	var errs []error
+	for _, alias := range aliases {
+		dst := filepath.Join(dir, alias)
+		if goos == "windows" {
+			dst += ".exe"
+		}
+		tmp := dst + ".new"
+		if err := copyFile(src, tmp); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", dst, err))
+			continue
+		}
+		if goos != "windows" {
+			_ = os.Chmod(tmp, 0755)
+		} else if _, err := os.Stat(dst); err == nil {
+			old := dst + ".old"
+			_ = os.Remove(old) // a leftover from the previous upgrade, no longer running
+			if err := os.Rename(dst, old); err != nil {
+				_ = os.Remove(tmp)
+				errs = append(errs, fmt.Errorf("%s: %w", dst, err))
+				continue
+			}
+		}
+		if err := os.Rename(tmp, dst); err != nil {
+			_ = os.Remove(tmp)
+			errs = append(errs, fmt.Errorf("%s: %w", dst, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func getPlatformAssetName() string {
