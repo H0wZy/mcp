@@ -3,7 +3,7 @@
 [![npm](https://img.shields.io/npm/v/%40h0wzy%2Fmcp-server-codex?color=CB3837&logo=npm)](https://www.npmjs.com/package/@h0wzy/mcp-server-codex)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/H0wZy/mcp/blob/main/LICENSE)
 
-High-performance **OpenAI Codex MCP Server** connecting any Model Context Protocol client (such as **Claude Code**, **Google Antigravity**, or custom agents) to OpenAI's **GPT-5.6 Terra / GPT-6 Astra** models.
+High-performance **OpenAI Codex MCP Server** connecting any Model Context Protocol client (such as **Claude Code**, **Google Antigravity**, or custom agents) to OpenAI's **GPT-6** models (default `gpt-6-astra`).
 
 Part of the **[H0wZy/mcp](https://github.com/H0wZy/mcp)** multi-agent ecosystem.
 
@@ -13,13 +13,16 @@ Part of the **[H0wZy/mcp](https://github.com/H0wZy/mcp)** multi-agent ecosystem.
 
 | Tool Name | Parameters | Description |
 | :--- | :--- | :--- |
-| `ask_codex` | `question` *(string)* | Cross-verification or second opinion from OpenAI Codex (GPT-5.6 / GPT-6 Astra). |
-| `review_codex` | `diff` *(string)*, `instruction` *(string)* | Structured repository code review from OpenAI Codex inspecting safety, tests, and diffs. |
-| `brainstorm_codex` | `topic` *(string)*, `context` *(string)* | Architectural exploration, trade-offs, and system design ideation with Codex. |
-| `plan_codex` | `goal` *(string)*, `requirements` *(string)* | Step-by-step implementation planning, checklists, and dependency roadmaps. |
-| `delegate_codex` | `prompt` *(string)*, `cwd` *(string)*, `paths` *(string[], optional)*, `model` *(string, optional)*, `timeout_minutes` *(number, 1-60, default 30)* | **Edits files** inside `cwd` (workspace-write sandbox). Hand a self-contained implementation task to Codex and get its final report. Review the diff afterwards. |
+| `configure_codex` | `action` (`get` \| `set` \| `reset` \| `list`), `tier`, `model`, `effort` *(all optional)* | Inspect or change the session's model and reasoning effort; tiers `light` / `balanced` / `deep`. |
+| `ask_codex` | `prompt` *(string)*, `paths`, `model`, `effort` *(optional)* | Independent second opinion or general question for OpenAI Codex. Runs in the read-only sandbox. |
+| `review_codex` | `prompt` *(string)*, `paths`, `model`, `effort` *(optional)* | Structured code review with your focus areas. |
+| `brainstorm_codex` | `prompt` *(string)*, `paths`, `model`, `effort` *(optional)* | Architectural alternatives, trade-offs and a recommendation. |
+| `plan_codex` | `prompt` *(string)*, `paths`, `model`, `effort` *(optional)* | Dependency-ordered implementation plan with file paths and test steps. |
+| `delegate_codex` | `prompt` *(string)*, `cwd` *(string)*, `paths` *(string[], optional)*, `model`, `effort` *(optional)*, `timeout_minutes` *(number, 1-60, default 30)* | **Edits files** inside `cwd` (workspace-write sandbox). Hand a self-contained implementation task to Codex and get its final report. Review the diff afterwards. |
 
 > `delegate_codex` writes to disk and never commits. Review the diff (`git diff`) before keeping its changes.
+
+> **Loop guard (spec 006).** Every task tool goes through the shared loop guard before the agent starts. Each reply ends with a trace line such as `[chain claude→codex · depth 1/2 · calls 1/8 · run a1b2c3d4]`, and calls that would loop are refused with `⛔ [Loop guard: …]`. `hmcp install` adds `--host <agent>` to the launch arguments so the guard knows which agent is calling.
 
 ---
 
@@ -78,6 +81,7 @@ Or using local source:
 - **Cross-Platform**: Automatically locates `codex.cmd` (Windows) or `codex` (macOS/Linux) via native PATH resolution.
 - **Rate Limit & Quota Resilience**: Gracefully traps HTTP 429 and rate-limit errors, returning structured fallback responses rather than crashing the client session.
 - **Privacy & Security**: Built-in credential redaction proactively masks API keys, OpenAI tokens (`sk-...`), and authorization headers from error messages.
+- **Lean sessions**: the Codex it starts loads only the H0wZy/mcp bridges from your `config.toml`. Every other MCP server is switched off for that run (`-c mcp_servers.<name>.enabled=false`), which cut a one-line answer from 37 s to 13 s on a real setup. `H0WZY_MCP_USER_SERVERS=1` keeps your servers.
 
 ---
 

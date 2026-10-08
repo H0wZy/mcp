@@ -8,8 +8,8 @@
 
 Centralize, enhance, and distribute high-performance **MCP (Model Context Protocol)** servers connecting the world's leading AI developer CLIs:
 - **Claude Code** (Anthropic)
-- **OpenAI Codex CLI** (OpenAI GPT-5.6 / GPT-6 Astra)
-- **Google Antigravity** (Gemini 3.1 Pro / Flash)
+- **OpenAI Codex CLI** (GPT-6 family, default GPT-6-Astra)
+- **Google Antigravity** (Gemini, default Gemini 3.8 Flash)
 
 Cross-model code reviews, independent second opinions, and autonomous multi-agent validation — configured effortlessly via an interactive **Golang TUI CLI**.
 
@@ -50,7 +50,7 @@ hmcp setup-path
 # Diagnose local environment, CLI installations, and paths
 hmcp doctor
 
-# Diagnose and output as JSON
+# Diagnose and output as JSON ({ tools, bridges, cycles, guard })
 hmcp doctor --json
 
 # Install all supported integrations automatically
@@ -59,6 +59,8 @@ hmcp install --all
 # Install a specific bridge globally or per-project
 hmcp install claude-antigravity --scope user
 hmcp install claude-codex --scope project
+hmcp install codex-claude            # let Codex call Claude Code
+hmcp install antigravity-claude      # let Antigravity call Claude Code
 
 # List available bridges
 hmcp list
@@ -73,20 +75,20 @@ hmcp remove claude-antigravity
 
 | Provider | Tool Name | Description |
 | :--- | :--- | :--- |
-| **Antigravity** | `ask_antigravity` | Independent second opinion or general inquiry from Gemini 3.1 Pro / Flash |
+| **Antigravity** | `ask_antigravity` | Independent second opinion or general inquiry from Gemini (3.8 Flash by default) |
 | **Antigravity** | `review_antigravity` | Comprehensive code & security review inspecting correctness, edge cases, and diffs |
 | **Antigravity** | `brainstorm_antigravity` | Architectural exploration, trade-offs, and design patterns with Gemini |
 | **Antigravity** | `plan_antigravity` | Structured implementation roadmaps and dependency-ordered execution steps |
-| **Antigravity** | `delegate_antigravity` | **Edits files.** Hands an implementation task to Antigravity inside `cwd` (`prompt`, `cwd`, optional `paths`, `model`, `timeout_minutes` 1-60, default 30). Review the diff afterwards |
-| **Codex** | `ask_codex` | Cross-verification with OpenAI Codex (GPT-5.6 Terra / GPT-6 Astra) |
+| **Antigravity** | `delegate_antigravity` | **Edits files.** Hands an implementation task to Antigravity inside `cwd` (`prompt`, `cwd`, optional `paths`, `model`, `effort`, `timeout_minutes` 1-60, default 30). Review the diff afterwards |
+| **Codex** | `ask_codex` | Cross-verification with OpenAI Codex (GPT-6-Astra by default). Read-only sandbox |
 | **Codex** | `review_codex` | Structured repository code review from OpenAI Codex |
 | **Codex** | `brainstorm_codex` | Architectural exploration, trade-offs, and system design ideation with Codex |
 | **Codex** | `plan_codex` | Step-by-step implementation planning and checklist generation |
-| **Codex** | `delegate_codex` | **Edits files.** Hands an implementation task to Codex inside `cwd` (workspace-write sandbox; `prompt`, `cwd`, optional `paths`, `model`, `timeout_minutes` 1-60, default 30). Review the diff afterwards |
+| **Codex** | `delegate_codex` | **Edits files.** Hands an implementation task to Codex inside `cwd` (workspace-write sandbox; `prompt`, `cwd`, optional `paths`, `model`, `effort`, `timeout_minutes` 1-60, default 30). Review the diff afterwards |
 
 > **Delegation tools write to disk.** `delegate_codex` and `delegate_antigravity` run the agent inside the given `cwd` and may create or modify files. They never commit for you: always review the resulting diff (`git diff`) before keeping the changes.
 >
-> **Antigravity default model:** all Antigravity tools now default to `Gemini 3.8 Flash (High)` (previously Gemini 3.1 Pro). Override per call with `model` or globally with the `AGY_MODEL` environment variable.
+> **Defaults:** Antigravity tools use `Gemini 3.8 Flash (High)` and Codex tools use `gpt-6-astra` at `medium`. Change them per call (`model`, `effort`), per session (`configure_antigravity` / `configure_codex`), or at startup (`AGY_MODEL` / `AGY_EFFORT`, `CODEX_MODEL` / `CODEX_EFFORT`).
 
 ---
 

@@ -1,3 +1,4 @@
+import './helpers/guard-env.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -179,3 +180,35 @@ test('configure_codex supports get, set explicit, and reset over stdio', async (
   assert.match(responses[2].result.content[0].text, /source": "startup/);
 });
 
+
+test('Claude Code MCP server answers initialize and lists all 6 tools with annotations', async () => {
+  const responses = await queryServer('./servers/claude/bin/cli.js', [
+    { jsonrpc: '2.0', id: 1, method: 'initialize' },
+    { jsonrpc: '2.0', id: 2, method: 'tools/list' },
+  ]);
+
+  assert.equal(responses[0].result.serverInfo.name, 'claude');
+  const tools = responses[1].result.tools;
+  assert.deepEqual(
+    tools.map((t) => t.name),
+    ['configure_claude', 'ask_claude', 'review_claude', 'brainstorm_claude', 'plan_claude', 'delegate_claude']
+  );
+  for (const tool of tools) {
+    if (/^(ask|review|brainstorm|plan)_/.test(tool.name)) assert.equal(tool.annotations.readOnlyHint, true, tool.name);
+  }
+  const delegate = tools.find((t) => t.name === 'delegate_claude');
+  assert.equal(delegate.annotations.destructiveHint, true);
+  assert.deepEqual(delegate.inputSchema.required, ['prompt', 'cwd']);
+});
+
+test('configure_claude supports get, set tier deep, and reset over stdio', async () => {
+  const responses = await queryServer('./servers/claude/bin/cli.js', [
+    { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'configure_claude', arguments: { action: 'get' } } },
+    { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'configure_claude', arguments: { action: 'set', tier: 'deep' } } },
+    { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'configure_claude', arguments: { action: 'reset' } } },
+  ]);
+
+  assert.match(responses[0].result.content[0].text, /Claude Code Active Configuration\]\nModel:  opus\nEffort: medium/);
+  assert.match(responses[1].result.content[0].text, /Active:   fable \(effort: high, source: tier:deep\)/);
+  assert.match(responses[2].result.content[0].text, /Active: opus \(effort: medium, source: startup\)/);
+});

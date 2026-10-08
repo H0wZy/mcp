@@ -36,11 +36,15 @@ jobs:
           node -e "JSON.parse(require('fs').readFileSync('package.json'))"
           node -e "JSON.parse(require('fs').readFileSync('servers/antigravity/package.json'))"
           node -e "JSON.parse(require('fs').readFileSync('servers/codex/package.json'))"
+          node -e "JSON.parse(require('fs').readFileSync('servers/claude/package.json'))"
+          node -e "JSON.parse(require('fs').readFileSync('servers/team/package.json'))"
           node -e "JSON.parse(require('fs').readFileSync('shared/package.json'))"
           node -e "JSON.parse(require('fs').readFileSync('npm/package.json'))"
           node --check npm/bin/h0wzy-mcp.js
           node --check servers/antigravity/bin/cli.js
           node --check servers/codex/bin/cli.js
+          node --check servers/claude/bin/cli.js
+          node --check servers/team/bin/cli.js
 
       - name: Interactive debug session (tmate)
         if: ${{ always() && ((inputs.debug_enabled == true) || (failure() && inputs.debug_on_failure == true)) }}
@@ -159,6 +163,8 @@ jobs:
           chmod +x npm/bin/h0wzy-mcp.js
           chmod +x servers/antigravity/bin/cli.js
           chmod +x servers/codex/bin/cli.js
+          chmod +x servers/claude/bin/cli.js
+          chmod +x servers/team/bin/cli.js
           node -e "
             const fs = require('fs');
             const pkg = JSON.parse(fs.readFileSync('package.json'));

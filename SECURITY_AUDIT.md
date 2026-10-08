@@ -73,6 +73,32 @@ We introduced `SanitizeHealthMessage(msg)`:
 - **Before**: `publish-packages.yml` lacked `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}` and had `continue-on-error: true` on all publish steps, silently passing even when npm publish failed with 404/401.
 - **Hardening**: Added `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}` and removed `continue-on-error: true`, ensuring publishing failures are surfaced immediately.
 
+### 4.4 v1.0.6 hardening (Phase 0 review, spec 006 and the real-CLI checks)
+- **Least privilege for read-only tools**:
+  - Codex read tools run with `sandbox_mode=read-only` and `approval_policy=never`.
+  - Antigravity read tools run without `--dangerously-skip-permissions`, so print mode soft-denies edits and unapproved commands. **Known gap**: agy 1.3.1 runs MCP tools without a prompt in every mode (read-only, `--mode accept-edits`, a custom `--agent` with a `tools` list), and loads every server in its config. Any Antigravity bridge call or agy teammate can therefore reach the user's agy MCP servers (a shop, a paid generator, a 3D app). There is no per-call switch; the tool descriptions and the README warn about it, and the fix is to keep such servers out of agy's config.
+  - Claude read tools start with only `Read`, `Grep` and `Glob`.
+  - Context `paths` are no longer passed to Codex as `--add-dir`, which would make those folders writable.
+- **Process lifecycle** (`shared/executor.js`, `shared/server.js`):
+  - Timeouts and MCP cancellation kill the agent's whole process tree.
+  - Output is capped.
+  - Closing the server stops its agents.
+- **Windows command lines**:
+  - npm and pnpm `.cmd` shims run as `node <script>`, without `cmd.exe`.
+  - Any other `.cmd` gets quoted arguments, and values `cmd.exe` would expand (`"`, `%`, `!`, line breaks) are refused.
+- **Loop guard** (`shared/chain-guard.js`, spec 006): bridge chains are capped by depth, revisits, call budget and deadline before anything is spawned. The guard fails closed when a nested call can't be traced. Its state files (`~/.h0wzy-mcp/`) are written with mode `0600`, and the opt-in log never contains prompt text.
+- **Inherited session variables**: the Claude bridge drops a Claude Code ancestor's session variables, including `CLAUDE_CODE_MESSAGING_TOKEN` and `CLAUDE_CODE_SESSION_ATTENDED`, before it starts `claude`.
+- **MCP scope of nested agents** (`shared/mcp-scope.js`, spec 006 FR-026): a nested Claude Code or Codex loads only the H0wZy/mcp agent bridges, never the user's other servers (opt-in with `H0WZY_MCP_USER_SERVERS=1`), so a bridge call can't reach the tools of unrelated servers.
+  - The bridges passed to Claude Code come only from the user's own `~/.claude.json` (user scope, and the local scope of the working folder). A project's `.mcp.json` is never read: Claude Code asks before it starts a project server, and passing one through `--mcp-config` would skip that approval for whatever a cloned repository calls "codex".
+  - Their definitions travel in a temp file (`h0wzy-mcp-*/mcp.json` in a `mkdtemp` folder, mode `0700`/`0600`, removed when the call ends), not on the command line, where other local processes could read any env values they carry. On Windows the mode bits do nothing: privacy comes from the ACL of `%TEMP%`, which is per-user by default (`%LOCALAPPDATA%\Temp`) but not if `TEMP`/`TMP` point to a shared folder. A bridge killed mid-call (SIGKILL, TerminateProcess) leaves the file behind.
+  - Only the read-only bridge tools (`ask_*`, `review_*`, `brainstorm_*`, `plan_*`) are pre-allowed (`--allowedTools`). A read-only call (`ask_*`, `review_*`, …, and read-only teammates) also denies `delegate_*` and `configure_*` of every mesh bridge: Claude Code gets `--disallowedTools` (deny rules hold in every permission mode, and the nested run otherwise inherits the user's; with `defaultMode: "auto"` a read-only `ask_claude` was seen starting `delegate_codex`, which wrote a file), Codex gets `-c mcp_servers.<name>.disabled_tools=[…]`. An editing call (`delegate_*`) may use them only under the user's own permission rules.
+  - Codex scoping is best effort: a server whose name `-c` can't address (a dot in a quoted name), dotted keys under `[mcp_servers]`, or project-layer Codex config stay as Codex loads them. The runtime guard (L2) still bounds bridge calls.
+- **Antigravity logs** (`shared/agy.js`): a bridge run gets a private `--log-file` in a fresh temp folder; a team turn writes it next to the team's results in `~/.h0wzy-mcp/teams/…` and deletes it after the turn. Only tokens that look like server names (`[A-Za-z0-9_.-]`) are read from the "still connecting" line, and the file is removed when the call ends (the log holds the account e-mail and permission lists). Team errors (provider stderr, these hints) pass through `sanitizeOutput` before they are stored or shown to the lead.
+- **Config writers** (`cli/config/`):
+  - A file that fails to parse is refused instead of overwritten.
+  - Writes are atomic.
+  - TOML sections are edited by lines (RE2 has no lookahead).
+
 ---
 
 ## 5. Summary Table of Files Hardened

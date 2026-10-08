@@ -1,3 +1,4 @@
+import './helpers/guard-env.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { isRateLimitError, isAuthError, formatResilientResponse, sanitizeOutput } from '../shared/errors.js';

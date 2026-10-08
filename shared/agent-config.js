@@ -157,6 +157,61 @@ export const CURATED_CATALOGS = {
   ],
 };
 
+
+const CLAUDE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+// Claude Code model aliases follow new releases on their own; the full ids pin a
+// version. Haiku 5.5 takes effort levels; Haiku 4.5 has none, so `--effort` is never
+// sent for the pinned 4.5 id. (On Bedrock, Vertex and Foundry the `haiku` alias is still
+// Haiku 4.5, and Claude Code falls back for a level the model lacks.)
+CURATED_CATALOGS.claude = [
+  {
+    id: 'fable',
+    displayName: 'Claude Fable (alias, currently Fable 5.1)',
+    efforts: CLAUDE_EFFORTS,
+    defaultEffort: 'high',
+    tierNote: 'deep',
+    description: 'Most capable Claude model, for the hardest reasoning and long agentic work. Highest cost.',
+  },
+  {
+    id: 'opus',
+    displayName: 'Claude Opus (alias, currently Opus 5.5)',
+    efforts: CLAUDE_EFFORTS,
+    defaultEffort: 'medium',
+    tierNote: 'balanced',
+    description: 'Strong default for coding and agentic work.',
+  },
+  {
+    id: 'sonnet',
+    displayName: 'Claude Sonnet (alias, currently Sonnet 5.5)',
+    efforts: CLAUDE_EFFORTS,
+    defaultEffort: 'medium',
+    tierNote: 'light',
+    description: 'Fast, lower-cost everyday coding model.',
+  },
+  {
+    id: 'haiku',
+    displayName: 'Claude Haiku (alias, currently Haiku 5.5)',
+    efforts: CLAUDE_EFFORTS,
+    defaultEffort: 'medium',
+    tierNote: 'light',
+    description: 'Fastest and cheapest.',
+  },
+  { id: 'claude-fable-5-1', displayName: 'Claude Fable 5.1', efforts: CLAUDE_EFFORTS, defaultEffort: 'high', tierNote: 'deep', description: 'Pinned Fable 5.1.' },
+  { id: 'claude-opus-5-5', displayName: 'Claude Opus 5.5', efforts: CLAUDE_EFFORTS, defaultEffort: 'medium', tierNote: 'balanced', description: 'Pinned Opus 5.5.' },
+  { id: 'claude-sonnet-5-5', displayName: 'Claude Sonnet 5.5', efforts: CLAUDE_EFFORTS, defaultEffort: 'medium', tierNote: 'light', description: 'Pinned Sonnet 5.5.' },
+  { id: 'claude-haiku-5-5', displayName: 'Claude Haiku 5.5', efforts: CLAUDE_EFFORTS, defaultEffort: 'medium', tierNote: 'light', description: 'Pinned Haiku 5.5.' },
+  {
+    id: 'claude-haiku-4-5',
+    displayName: 'Claude Haiku 4.5',
+    efforts: CLAUDE_EFFORTS,
+    effortControl: false,
+    defaultEffort: 'medium',
+    tierNote: 'light',
+    description: 'Pinned Haiku 4.5. No effort control.',
+  },
+];
+
 export const BUILTIN_TIERS = {
   antigravity: {
     light: { model: 'gemini-3.8-flash', effort: 'low' },
@@ -168,6 +223,19 @@ export const BUILTIN_TIERS = {
     balanced: { model: 'gpt-6-astra', effort: 'medium' },
     deep: { model: 'gpt-6-astra', effort: 'xhigh' },
   },
+  claude: {
+    light: { model: 'sonnet', effort: 'low' },
+    balanced: { model: 'opus', effort: 'medium' },
+    deep: { model: 'fable', effort: 'high' },
+  },
+};
+
+// Env prefix and startup defaults per provider.
+const PROVIDERS = {
+  antigravity: { prefix: 'AGY_', model: 'gemini-3.8-flash', effort: 'high' },
+  codex: { prefix: 'CODEX_', model: 'gpt-6-astra', effort: 'medium' },
+  // Not CLAUDE_: Claude Code exports CLAUDE_EFFORT and other CLAUDE_* vars to its children.
+  claude: { prefix: 'CLAUDE_BRIDGE_', model: 'opus', effort: 'medium' },
 };
 
 
@@ -301,7 +369,7 @@ export function findModelInCatalog(rawInput, catalog = []) {
  * Creates an agent configuration manager for a specific provider.
  *
  * @param {Object} options
- * @param {'antigravity'|'codex'} options.provider
+ * @param {'antigravity'|'codex'|'claude'} options.provider
  * @param {string} [options.defaultModel]
  * @param {string} [options.defaultEffort]
  * @param {() => Promise<Array<any>>} [options.catalogLoader] Async loader for external CLI catalog
@@ -310,11 +378,11 @@ export function findModelInCatalog(rawInput, catalog = []) {
 export function createAgentConfig(options) {
   const { provider, catalogLoader, env = process.env } = options;
 
-  if (provider !== 'antigravity' && provider !== 'codex') {
+  if (!PROVIDERS[provider]) {
     throw new Error(`Unsupported provider: ${provider}`);
   }
 
-  const prefix = provider === 'antigravity' ? 'AGY_' : 'CODEX_';
+  const { prefix } = PROVIDERS[provider];
 
   // 1. Parse Developer Ceilings from Environment
   const rawMaxEffort = (env[`${prefix}MAX_EFFORT`] || '').trim().toLowerCase();
@@ -344,8 +412,8 @@ export function createAgentConfig(options) {
   const envModel = (env[`${prefix}MODEL`] || options.defaultModel || '').trim();
   const envEffort = (env[`${prefix}EFFORT`] || options.defaultEffort || '').trim().toLowerCase();
 
-  let startupModel = envModel || (provider === 'antigravity' ? 'gemini-3.8-flash' : 'gpt-6-astra');
-  let startupEffort = isValidEffort(envEffort) ? envEffort : provider === 'antigravity' ? 'high' : 'medium';
+  let startupModel = envModel || PROVIDERS[provider].model;
+  let startupEffort = isValidEffort(envEffort) ? envEffort : PROVIDERS[provider].effort;
 
   // Extract implied effort if startup model was formatted as "Gemini 3.8 Flash (High)"
   const startupMatch = startupModel.match(/^(.+?)\s*\((low|medium|high|xhigh|max|ultra)\)$/i);
@@ -357,30 +425,44 @@ export function createAgentConfig(options) {
   }
 
   // 4. Catalog Cache State
+  // Loading never blocks callers (they get the curated list meanwhile), so a slow CLI
+  // can take longer than the 5 s discovery budget; a failed load is retried later.
+  const catalogTimeoutMs = options.catalogTimeoutMs ?? 5000;
+  const catalogRetryMs = options.catalogRetryMs ?? 10 * 60 * 1000;
   let catalog = [...CURATED_CATALOGS[provider]];
   let catalogSource = 'curated';
   let catalogStatus = 'ready'; // 'ready', 'loading', 'failed'
   let catalogLoadedPromise = null;
+  let catalogFailedAt = 0;
 
   function ensureCatalogLoading() {
-    if (catalogLoadedPromise || !catalogLoader) return;
+    if (!catalogLoader || catalogLoadedPromise || catalogSource === 'live') return;
+    if (catalogFailedAt && Date.now() - catalogFailedAt < catalogRetryMs) return;
     catalogStatus = 'loading';
     catalogLoadedPromise = (async () => {
+      let timer;
       try {
         const loaded = await Promise.race([
           catalogLoader(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+          new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error('timeout')), catalogTimeoutMs);
+            timer.unref?.();
+          }),
         ]);
         if (Array.isArray(loaded) && loaded.length > 0) {
           catalog = loaded;
           catalogSource = 'live';
           catalogStatus = 'ready';
-        } else {
-          catalogStatus = 'failed';
+          return;
         }
+        catalogStatus = 'failed';
       } catch {
         catalogStatus = 'failed';
+      } finally {
+        clearTimeout(timer);
       }
+      catalogFailedAt = Date.now();
+      catalogLoadedPromise = null;
     })();
   }
 
@@ -393,8 +475,13 @@ export function createAgentConfig(options) {
     warnings: [],
   };
 
+  function effortsFor(modelId) {
+    return findModelInCatalog(modelId, catalog)?.entry.efforts || EFFORT_LEVELS;
+  }
+
   /**
-   * Applies developer ceiling clamping to a proposed model and effort.
+   * Applies developer ceiling clamping to a proposed model and effort, then re-maps the
+   * effort to what the final model supports.
    */
   function applyCeilings(modelId, effortLevel, modelTierNote = 'balanced') {
     const warnings = [];
@@ -407,9 +494,21 @@ export function createAgentConfig(options) {
     }
 
     if (maxTier && TIER_RANKS[modelTierNote] > TIER_RANKS[maxTier]) {
-      const fallbackModel = tiers[maxTier].model;
-      warnings.push(`Model '${mod}' (tier: ${modelTierNote}) clamped to ceiling '${maxTier}' (${fallbackModel}) by ${prefix}MAX_TIER`);
-      mod = fallbackModel;
+      const ceilingTier = tiers[maxTier];
+      warnings.push(`Model '${mod}' (tier: ${modelTierNote}) clamped to ceiling '${maxTier}' (${ceilingTier.model}) by ${prefix}MAX_TIER`);
+      mod = ceilingTier.model;
+      // A tier is a model and an effort: running the tier's model above the tier's
+      // effort would still exceed the ceiling (codex 'balanced' uses the same model as 'deep').
+      if (EFFORT_RANKS[eff] > EFFORT_RANKS[ceilingTier.effort]) {
+        warnings.push(`Effort '${eff}' clamped to '${ceilingTier.effort}' by the '${maxTier}' tier ceiling`);
+        eff = ceilingTier.effort;
+      }
+    }
+
+    const remapped = mapEffort(eff, effortsFor(mod));
+    if (remapped.mappedFrom) {
+      warnings.push(`Effort '${eff}' not supported by ${mod}; mapped to '${remapped.effort}'`);
+      eff = remapped.effort;
     }
 
     return { model: mod, effort: eff, warnings };
@@ -471,6 +570,8 @@ export function createAgentConfig(options) {
           throw new Error(`Model name '${targetModel}' contains invalid characters. Must match ${SAFE_IDENTIFIER_REGEX}`);
         }
         warnings.push(`Model '${targetModel}' could not be verified against live catalog (using unverified model)`);
+        // Its strength is unknown, so it must not slip under a tier ceiling.
+        if (maxTier) modelTier = 'deep';
       }
     }
 
@@ -483,6 +584,9 @@ export function createAgentConfig(options) {
     // Apply ceilings
     const clamped = applyCeilings(canonicalModel, mapped.effort, modelTier);
     warnings.push(...clamped.warnings);
+    if (clamped.effort === 'ultra') {
+      warnings.push("Effort 'ultra' makes Codex delegate sub-tasks on its own; expect much higher cost and latency");
+    }
 
     return {
       model: clamped.model,
@@ -617,30 +721,46 @@ export function createAgentConfig(options) {
   function resolveCall(overrides = {}) {
     ensureCatalogLoading();
     const hasOverride = Boolean(overrides.model || overrides.effort);
+    const notices = [];
+
+    // A session model accepted unverified while the catalog was still loading can be
+    // rejected once the live catalog arrives. Fall back to the startup defaults instead
+    // of failing every later call until someone runs `reset`.
+    if (!overrides.model && catalogSource === 'live' && !findModelInCatalog(activeState.model, catalog)) {
+      const stale = activeState.model;
+      reset();
+      notices.push(`Session model '${stale}' is not in the live catalog; reverted to the startup default '${activeState.model}'`);
+    }
 
     const resolved = resolveSettings({
       model: overrides.model || activeState.model,
       effort: overrides.effort || activeState.effort,
       isExplicit: hasOverride,
     });
+    resolved.warnings = [...notices, ...resolved.warnings];
 
     // Compute CLI-specific argument representations
     let cliModel = resolved.model;
     let cliEffort = resolved.effort;
 
+    let effortApplied = true;
+    const found = findModelInCatalog(resolved.model, catalog);
     if (provider === 'antigravity') {
       // Find variant ID if available
-      const found = findModelInCatalog(resolved.model, catalog);
       if (found && found.entry.variants && found.entry.variants[resolved.effort]) {
         cliModel = found.entry.variants[resolved.effort];
         cliEffort = null; // Passed via variant model ID directly
       }
+    } else if (found?.entry.effortControl === false) {
+      cliEffort = null; // The model takes no effort setting at all
+      effortApplied = false;
     }
 
     return Object.freeze({
       provider,
       model: resolved.model,
       effort: resolved.effort,
+      effortApplied,
       cliModel,
       cliEffort,
       source: hasOverride ? 'override' : resolved.source,
@@ -651,12 +771,26 @@ export function createAgentConfig(options) {
   /**
    * Formats the standardized execution footer.
    */
-  function formatFooter(snapshot) {
-    const base = `[${snapshot.provider} · model=${snapshot.model} · effort=${snapshot.effort} · source=${snapshot.source}]`;
+  function formatFooter(snapshot, extras = {}) {
+    const effort = snapshot.effortApplied === false ? 'n/a' : snapshot.effort;
+    const more = Object.entries(extras)
+      .filter(([, v]) => v !== undefined && v !== null && v !== '')
+      .map(([k, v]) => ` · ${k}=${v}`)
+      .join('');
+    const base = `[${snapshot.provider} · model=${snapshot.model} · effort=${effort} · source=${snapshot.source}${more}]`;
     if (snapshot.warnings && snapshot.warnings.length > 0) {
       return `\n\n${base}\n⚠️ ${snapshot.warnings.join('\n⚠️ ')}`;
     }
     return `\n\n${base}`;
+  }
+
+  // Normalize the startup state once (canonical id, supported effort, ceilings) so `get`
+  // reports what a call would actually run with.
+  try {
+    const initial = resolveSettings({ model: startupModel, effort: startupEffort });
+    activeState = { model: initial.model, effort: initial.effort, tier: null, source: 'startup', warnings: initial.warnings };
+  } catch (err) {
+    activeState.warnings = [err.message];
   }
 
   return {
@@ -667,5 +801,6 @@ export function createAgentConfig(options) {
     resolveCall,
     formatFooter,
     ensureCatalogLoading,
+    catalogReady: () => catalogLoadedPromise || Promise.resolve(),
   };
 }

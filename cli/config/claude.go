@@ -1,8 +1,6 @@
 package config
 
 import (
-	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -29,15 +27,17 @@ func getClaudeConfigPath(scope string) (string, error) {
 	return filepath.Join(home, ".claude.json"), nil
 }
 
+// RegisterClaudeServerCommand writes a stdio MCP server into Claude Code's config.
+// "--host claude" is appended to args so the bridge knows which agent runs it.
 func RegisterClaudeServerCommand(name, command string, args []string, scope string) error {
 	cfgPath, err := getClaudeConfigPath(scope)
 	if err != nil {
 		return err
 	}
 
-	data := make(map[string]interface{})
-	if content, err := os.ReadFile(cfgPath); err == nil {
-		_ = json.Unmarshal(content, &data)
+	data, err := readJSONObject(cfgPath)
+	if err != nil {
+		return err
 	}
 
 	mcpServers, ok := data["mcpServers"].(map[string]interface{})
@@ -49,19 +49,10 @@ func RegisterClaudeServerCommand(name, command string, args []string, scope stri
 	mcpServers[name] = map[string]interface{}{
 		"type":    "stdio",
 		"command": command,
-		"args":    args,
+		"args":    withHostArg(args, AgentClaude),
 	}
 
-	out, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to serialize claude config: %w", err)
-	}
-
-	if err := os.MkdirAll(filepath.Dir(cfgPath), 0700); err != nil {
-		return err
-	}
-
-	return os.WriteFile(cfgPath, out, 0600)
+	return writeJSONObject(cfgPath, data)
 }
 
 func RegisterClaudeServer(name, serverCliPath, scope string) error {
@@ -74,13 +65,12 @@ func UnregisterClaudeServer(name, scope string) error {
 		return err
 	}
 
-	content, err := os.ReadFile(cfgPath)
-	if err != nil {
+	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
 		return nil
 	}
 
-	var data map[string]interface{}
-	if err := json.Unmarshal(content, &data); err != nil {
+	data, err := readJSONObject(cfgPath)
+	if err != nil {
 		return err
 	}
 
@@ -91,10 +81,5 @@ func UnregisterClaudeServer(name, scope string) error {
 
 	delete(mcpServers, name)
 
-	out, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(cfgPath, out, 0600)
+	return writeJSONObject(cfgPath, data)
 }

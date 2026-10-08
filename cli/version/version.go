@@ -13,8 +13,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Current is the CLI version. Release builds overwrite it through goreleaser's
+// -ldflags "-X github.com/H0wZy/mcp/cli/version.Current=<tag>", so it must stay a var.
+var Current = "1.0.6"
+
 const (
-	Current      = "1.0.5"
 	NpmRegistry  = "https://registry.npmjs.org/@h0wzy/mcp/latest"
 	GitHubLatest = "https://api.github.com/repos/H0wZy/mcp/releases/latest"
 	CacheTTL     = 4 * time.Hour

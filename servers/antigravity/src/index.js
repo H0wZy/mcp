@@ -1,22 +1,56 @@
 // H0wZy/mcp — Antigravity MCP Server
 // Minimal, DRY bridge exposing Google Antigravity (Gemini 3.8 Flash / Pro) to any MCP client.
 
-import { statSync } from 'node:fs';
 import { dirname } from 'node:path';
-import {
+
+// Installed from npm, @h0wzy/mcp-shared is a real dependency. Run straight from a
+// clone without `npm install`, fall back to the workspace copy of shared/.
+const shared = await import('@h0wzy/mcp-shared').catch((err) => {
+  if (err?.code !== 'ERR_MODULE_NOT_FOUND') throw err;
+  return import('../../../shared/index.js');
+});
+const {
   createMcpServer,
   resolveBinary,
   executeProcess,
   formatResilientResponse,
+  sanitizeOutput,
   createAgentConfig,
-} from '../../../shared/index.js';
+  createConfigureTool,
+  noBridgeArgs,
+  validateCwd,
+  normalizePaths,
+  clampTimeoutMinutes,
+  createAgyLog,
+  hitPrintTimeout,
+  stuckMcpServers,
+  stuckServersHint,
+  invalidSchemaHint,
+} = shared;
 
-const TIMEOUT_MS = 300000; // 5 minutes
+// Print mode soft-denies edits in read-only calls; telling the model up front saves the
+// turns it would spend trying.
+const READ_ONLY_NOTICE =
+  'Read-only request: do not create, edit or delete files and do not run commands that change anything. ' +
+  'Those actions are blocked here and only waste time. If a change is needed, describe it in your answer.';
+const STDERR_NOTICE_CHARS = 1500;
+// agy needs ~25 s around --print-timeout to start (CLI, sign-in, MCP servers) and to
+// return its partial output; the process limit leaves room for that.
+const PRINT_TIMEOUT_GRACE_MS = 60000;
+// agy 1.3.1 loads every MCP server in ~/.gemini/config/mcp_config.json and runs their
+// tools without asking, in every mode (default, accept-edits, a custom --agent; spec 006
+// research §7). No per-call switch exists, so callers must know.
+const AGY_MCP_NOTE =
+  ' Note: Antigravity also loads every MCP server the user configured in agy and can call their tools without asking ' +
+  '(agy has no per-call switch), so only use it where those servers are safe to reach.';
+const READ_ONLY_ANNOTATIONS = { readOnlyHint: true, openWorldHint: true };
 
 async function loadAgyCatalog() {
   const agyBin = resolveBinary('agy', 'AGY_BIN');
   if (!agyBin) return null;
-  const res = await executeProcess(agyBin, ['models'], { timeoutMs: 4500, toolName: 'agy' });
+  // `agy models` takes ~20 s (spec 005 research R3). Loading runs in the background,
+  // so a realistic timeout costs callers nothing; they use the curated list meanwhile.
+  const res = await executeProcess(agyBin, ['models'], { timeoutMs: 40000, toolName: 'agy' });
   if (!res.ok || !res.stdout) return null;
 
   const families = new Map();
@@ -61,14 +95,48 @@ async function loadAgyCatalog() {
 export const agentConfig = createAgentConfig({
   provider: 'antigravity',
   catalogLoader: loadAgyCatalog,
+  catalogTimeoutMs: 45000,
 });
 
-async function executeAgyPrompt({ prompt, prefix = '', paths = [], model, effort, cwd, timeoutMinutes = 5 }) {
+// Without --dangerously-skip-permissions, print mode soft-denies every action that
+// needs approval (file edits, and shell commands or MCP tools the user hasn't allowed):
+// the run goes on, exits 0 and names the skipped tool on stderr
+// (https://antigravity.google/docs/cli/headless/). Only delegate_* auto-approves.
+async function executeAgyPrompt({
+  prompt,
+  prefix = '',
+  paths,
+  model,
+  effort,
+  cwd,
+  requireCwd = false,
+  autoApprove = false,
+  timeoutMinutes = 5,
+  signal,
+  hop,
+}) {
   if (!prompt) {
     return { text: 'Missing required argument: prompt', isError: true };
   }
 
-  const snapshot = agentConfig.resolveCall({ model, effort });
+  let workDir;
+  let contextPaths;
+  try {
+    workDir = cwd !== undefined || requireCwd ? validateCwd(cwd) : undefined;
+    contextPaths = normalizePaths(paths, workDir);
+  } catch (err) {
+    return { text: `❌ ${err.message}`, isError: true };
+  }
+
+  let snapshot;
+  try {
+    snapshot = agentConfig.resolveCall({ model, effort });
+  } catch (err) {
+    return {
+      isError: true,
+      text: `❌ ${err.message}\n💡 Call configure_antigravity with action "list" for valid models and efforts, or "reset" to restore the defaults.`,
+    };
+  }
 
   const agyBin = resolveBinary('agy', 'AGY_BIN');
   if (!agyBin) {
@@ -83,19 +151,23 @@ async function executeAgyPrompt({ prompt, prefix = '', paths = [], model, effort
     };
   }
 
-  const dirs = new Set(cwd ? [cwd] : []);
-  for (const p of paths) {
-    try {
-      dirs.add(statSync(p).isDirectory() ? p : dirname(p));
-    } catch {
-      /* skip unreadable path */
-    }
+  const dirs = new Set(workDir ? [workDir] : []);
+  for (const p of contextPaths) {
+    if (p.isDir !== null) dirs.add(p.isDir ? p.path : dirname(p.path));
   }
 
   const formattedPrompt = prefix ? `${prefix}\n\n${prompt}` : prompt;
-  const fullPrompt = paths.length
-    ? `Context files/folders to read and consider in full:\n${paths.map((p) => `- ${p}`).join('\n')}\n\n${formattedPrompt}`
+  const withContext = contextPaths.length
+    ? `Context files/folders to read and consider in full:\n${contextPaths.map((p) => `- ${p.path}`).join('\n')}\n\n${formattedPrompt}`
     : formattedPrompt;
+  const guarded = autoApprove ? withContext : `${READ_ONLY_NOTICE}\n\n${withContext}`;
+  // L3: tell the agent where it sits in the chain (spec 006).
+  const fullPrompt = hop ? `${hop.notice}\n\n${guarded}` : guarded;
+  // A child never outlives its chain: cap the run, rounded down to whole minutes, and
+  // keep agy's grace after --print-timeout inside the deadline.
+  const minutes = hop
+    ? Math.max(1, Math.min(timeoutMinutes, Math.floor((hop.remainingMs() - PRINT_TIMEOUT_GRACE_MS) / 60000)))
+    : timeoutMinutes;
 
   const args = [
     '-p',
@@ -103,9 +175,13 @@ async function executeAgyPrompt({ prompt, prefix = '', paths = [], model, effort
     '--model',
     snapshot.cliModel,
     '--print-timeout',
-    `${timeoutMinutes}m`,
-    '--dangerously-skip-permissions',
+    `${minutes}m`,
   ];
+
+  // L1: agy has no per-call MCP switch; at least stop prompt-driven skill expansion.
+  if (hop?.atMaxDepth) args.push(...noBridgeArgs('antigravity'));
+
+  if (autoApprove) args.push('--dangerously-skip-permissions');
 
   if (snapshot.cliEffort) {
     args.push('--effort', snapshot.cliEffort);
@@ -113,123 +189,97 @@ async function executeAgyPrompt({ prompt, prefix = '', paths = [], model, effort
 
   for (const d of dirs) args.push('--add-dir', d);
 
-  const res = await executeProcess(agyBin, args, {
-    cwd,
-    timeoutMs: cwd ? timeoutMinutes * 60000 + 30000 : TIMEOUT_MS,
-    toolName: 'agy',
-  });
+  // A private log explains a run that never started (an MCP server that can't connect).
+  const log = createAgyLog();
+  if (log.file) args.push('--log-file', log.file);
+
+  let res;
+  let hint = '';
+  try {
+    // Outlive --print-timeout so agy can return its partial output itself, but never
+    // the chain's deadline.
+    const limitMs = minutes * 60000 + PRINT_TIMEOUT_GRACE_MS;
+    res = await executeProcess(agyBin, args, {
+      cwd: workDir,
+      timeoutMs: hop ? hop.capTimeoutMs(limitMs) : limitMs,
+      signal,
+      toolName: 'agy',
+      env: hop?.childEnv,
+      onSpawn: hop ? (child) => hop.registerAgent(child.pid) : undefined,
+    });
+    if (res.timedOut || hitPrintTimeout(res.stderr)) hint = stuckServersHint(stuckMcpServers(log.read()));
+  } finally {
+    log.cleanup();
+  }
 
   const footer = agentConfig.formatFooter(snapshot);
 
-  if (res.ok) {
+  // agy exits 0 after its own --print-timeout, with whatever it had (often nothing).
+  if (!res.cancelled && (res.timedOut || hitPrintTimeout(res.stderr))) {
+    const partial = sanitizeOutput(res.stdout || '').trim();
     return {
-      text: (res.stdout || '(Antigravity completed with no output)') + footer,
+      text:
+        (partial ? `${partial}\n\n⏱️ Antigravity did not finish within ${minutes} min; the answer above is partial.` : `⏱️ Antigravity did not finish within ${minutes} min and returned no answer.`) +
+        (hint ? `\n${hint}` : '') +
+        footer,
+      isError: true,
+      outcome: 'timed-out',
+    };
+  }
+
+  if (res.ok) {
+    // Read-only runs report soft-denied actions on stderr; pass that on so the caller
+    // knows the answer may be incomplete and how the user can allow the action.
+    const notices = !autoApprove && res.stderr ? sanitizeOutput(res.stderr).slice(-STDERR_NOTICE_CHARS) : '';
+    return {
+      text:
+        (res.stdout || '(Antigravity completed with no output)') +
+        (notices ? `\n\n⚠️ Antigravity notices (stderr):\n${notices}` : '') +
+        footer,
       isError: false,
     };
   }
 
   const formatted = formatResilientResponse({
     provider: 'Google Antigravity',
-    rawOutput: res.stderr || res.stdout,
+    // Keep any partial answer next to the error.
+    rawOutput: [res.stderr, res.stdout].filter(Boolean).join('\n\n'),
     exitCode: res.exitCode,
   });
 
+  // A user MCP server agy can't load makes every run fail: say which, first.
+  const schemaHint = invalidSchemaHint(res.stderr || res.stdout);
   return {
-    text: formatted.text + footer,
+    text: (schemaHint ? `⚠️ ${schemaHint}\n\n` : '') + formatted.text + footer,
     isError: true,
+    outcome: res.timedOut ? 'timed-out' : 'failed',
   };
 }
 
-export const configureAntigravityTool = {
+export const configureAntigravityTool = createConfigureTool({
   name: 'configure_antigravity',
+  label: 'Google Antigravity',
+  agentConfig,
   description:
     'Inspect or change Google Antigravity model and reasoning effort for the current session. ' +
     'Supports pre-configured tiers ("light" for trivial tasks, "balanced" for routine work, "deep" for hard bugs/complex architecture/security), ' +
     'explicit models (e.g. "gemini-3.8-flash", "gemini-3.1-pro"), or custom efforts ("low"|"medium"|"high"|"xhigh"|"max"). ' +
     'Actions: "get" (view active settings), "set" (apply updates), "reset" (restore startup defaults), "list" (catalog & tiers). ' +
     'Claude Code may switch tiers autonomously based on task difficulty.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      action: {
-        type: 'string',
-        enum: ['get', 'set', 'reset', 'list'],
-        default: 'get',
-        description: 'Action to perform. Default is "get" (read current state without modifying).',
-      },
-      tier: {
-        type: 'string',
-        enum: ['light', 'balanced', 'deep'],
-        description: 'Preset tier: "light" (Flash Low), "balanced" (Flash Medium), "deep" (Flash High).',
-      },
-      model: {
-        type: 'string',
-        description: 'Model family or variant identifier (e.g. "gemini-3.8-flash", "gemini-3.1-pro").',
-      },
-      effort: {
-        type: 'string',
-        enum: ['low', 'medium', 'high', 'xhigh', 'max'],
-        description: 'Reasoning effort level. Automatically mapped to supported levels.',
-      },
-    },
-  },
-  handler: (args = {}) => {
-    const action = (args.action || 'get').toLowerCase();
-
-    if (action === 'get') {
-      const state = agentConfig.get();
-      return (
-        `⚙️ [Google Antigravity Active Configuration]\n` +
-        `Model:  ${state.active.model}\n` +
-        `Effort: ${state.active.effort}` +
-        (state.active.tier ? ` (Tier: ${state.active.tier})` : '') +
-        `\nSource: ${state.active.source}\n\n` +
-        JSON.stringify(state, null, 2)
-      );
-    }
-
-    if (action === 'set') {
-      const updated = agentConfig.set(args);
-      let summary =
-        `⚙️ [Google Antigravity Configuration Updated]\n` +
-        `Previous: ${updated.previous.model} (effort: ${updated.previous.effort}, source: ${updated.previous.source})\n` +
-        `Active:   ${updated.active.model} (effort: ${updated.active.effort}, source: ${updated.active.source})\n`;
-
-      if (updated.warnings && updated.warnings.length > 0) {
-        summary += `⚠️ Warnings:\n  - ${updated.warnings.join('\n  - ')}\n`;
-      }
-      return summary + '\n' + JSON.stringify(updated, null, 2);
-    }
-
-    if (action === 'reset') {
-      const resetState = agentConfig.reset();
-      return (
-        `🔄 [Google Antigravity Configuration Reset to Startup Defaults]\n` +
-        `Active: ${resetState.active.model} (effort: ${resetState.active.effort}, source: startup)\n\n` +
-        JSON.stringify(resetState, null, 2)
-      );
-    }
-
-    if (action === 'list') {
-      const catalog = agentConfig.list();
-      return (
-        `📋 [Google Antigravity Model Catalog & Tiers]\n` +
-        `Catalog Source: ${catalog.catalogSource} (status: ${catalog.catalogStatus})\n\n` +
-        JSON.stringify(catalog, null, 2)
-      );
-    }
-
-    throw new Error(`Unsupported action '${action}'. Valid actions: get, set, reset, list`);
-  },
-};
+  tierDescription: 'Preset tier: "light" (Flash Low), "balanced" (Flash Medium), "deep" (Flash High).',
+  modelDescription: 'Model family or variant identifier (e.g. "gemini-3.8-flash", "gemini-3.1-pro").',
+  efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+});
 
 export const askAntigravityTool = {
   name: 'ask_antigravity',
+  spawnsAgent: true,
   description:
     'Get an INDEPENDENT second opinion or answer from Google Antigravity ' +
     '(default model: Gemini 3.8 Flash High; configure via configure_antigravity). ' +
     'A different model family than Claude or OpenAI, ensuring an unbiased cross-check. ' +
-    'Provide a `prompt`; optionally pass `paths`, `model`, or `effort`.',
+    'Provide a `prompt`; optionally pass `paths`, `model`, or `effort`.' + AGY_MCP_NOTE,
+  annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
     properties: {
@@ -254,15 +304,19 @@ export const askAntigravityTool = {
     },
     required: ['prompt'],
   },
-  handler: (args) => executeAgyPrompt(args),
+  handler: ({ prompt, paths, model, effort }, ctx) =>
+    executeAgyPrompt({ prompt, paths, model, effort, signal: ctx?.signal, hop: ctx?.hop }),
 };
 
 export const reviewAntigravityTool = {
   name: 'review_antigravity',
+  spawnsAgent: true,
   description:
     'Request a thorough, structured code review from Google Antigravity (default model: Gemini 3.8 Flash High). ' +
     'Inspects code correctness, edge cases, race conditions, security vulnerabilities, performance, and architecture. ' +
-    'Use tier "deep" via configure_antigravity for complex security/architecture reviews.',
+    'Use tier "deep" via configure_antigravity for complex security/architecture reviews. ' +
+    'Read-only: it cannot edit files, and shell commands the user has not allowed are skipped, so pass the files to review in `paths`.' + AGY_MCP_NOTE,
+  annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
     properties: {
@@ -287,9 +341,14 @@ export const reviewAntigravityTool = {
     },
     required: ['prompt'],
   },
-  handler: (args) =>
+  handler: ({ prompt, paths, model, effort }, ctx) =>
     executeAgyPrompt({
-      ...args,
+      prompt,
+      paths,
+      model,
+      effort,
+      signal: ctx?.signal,
+      hop: ctx?.hop,
       prefix:
         'You are performing a comprehensive code review. Focus on bug detection, race conditions, ' +
         'security issues, performance bottlenecks, and architectural clarity. Provide specific recommendations or diffs where helpful.',
@@ -298,10 +357,12 @@ export const reviewAntigravityTool = {
 
 export const brainstormAntigravityTool = {
   name: 'brainstorm_antigravity',
+  spawnsAgent: true,
   description:
     'Architectural brainstorming and exploration with Google Antigravity. ' +
     'Explores alternative design patterns, trade-offs, scalability considerations, and pros/cons. ' +
-    'Configure model and effort via configure_antigravity.',
+    'Configure model and effort via configure_antigravity.' + AGY_MCP_NOTE,
+  annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
     properties: {
@@ -326,9 +387,14 @@ export const brainstormAntigravityTool = {
     },
     required: ['prompt'],
   },
-  handler: (args) =>
+  handler: ({ prompt, paths, model, effort }, ctx) =>
     executeAgyPrompt({
-      ...args,
+      prompt,
+      paths,
+      model,
+      effort,
+      signal: ctx?.signal,
+      hop: ctx?.hop,
       prefix:
         'You are a software architect exploring system design options. Analyze the given problem, ' +
         'brainstorm 2-3 viable architectural alternatives, outline trade-offs and pros/cons for each, and recommend the best path forward.',
@@ -337,9 +403,11 @@ export const brainstormAntigravityTool = {
 
 export const planAntigravityTool = {
   name: 'plan_antigravity',
+  spawnsAgent: true,
   description:
     'Generate a step-by-step implementation plan or execution checklist using Google Antigravity. ' +
-    'Configure model and effort via configure_antigravity.',
+    'Configure model and effort via configure_antigravity.' + AGY_MCP_NOTE,
+  annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
     properties: {
@@ -364,9 +432,14 @@ export const planAntigravityTool = {
     },
     required: ['prompt'],
   },
-  handler: (args) =>
+  handler: ({ prompt, paths, model, effort }, ctx) =>
     executeAgyPrompt({
-      ...args,
+      prompt,
+      paths,
+      model,
+      effort,
+      signal: ctx?.signal,
+      hop: ctx?.hop,
       prefix:
         'You are a lead technical planner. Break down the requested goal into structured, ' +
         'dependency-ordered, verifiable implementation tasks with concrete file paths and test steps.',
@@ -375,10 +448,12 @@ export const planAntigravityTool = {
 
 export const delegateAntigravityTool = {
   name: 'delegate_antigravity',
+  spawnsAgent: true,
   description:
     'Hand a self-contained implementation task to Google Antigravity, which EDITS FILES inside `cwd` ' +
     '(permissions skipped). Review the diff afterwards. Returns the final report from Antigravity. ' +
-    'Configure model and effort via configure_antigravity.',
+    'Configure model and effort via configure_antigravity.' + AGY_MCP_NOTE,
+  annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   inputSchema: {
     type: 'object',
     properties: {
@@ -395,14 +470,18 @@ export const delegateAntigravityTool = {
     },
     required: ['prompt', 'cwd'],
   },
-  handler: ({ prompt, cwd, paths, model, effort, timeout_minutes }) =>
+  handler: ({ prompt, cwd, paths, model, effort, timeout_minutes }, ctx) =>
     executeAgyPrompt({
       prompt,
       paths,
       model,
       effort,
       cwd,
-      timeoutMinutes: Math.min(Math.max(Math.round(timeout_minutes || 30), 1), 60),
+      requireCwd: true,
+      autoApprove: true,
+      timeoutMinutes: clampTimeoutMinutes(timeout_minutes),
+      signal: ctx?.signal,
+      hop: ctx?.hop,
     }),
 };
 

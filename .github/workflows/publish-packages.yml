@@ -26,14 +26,62 @@ jobs:
       - name: Upgrade npm to latest for Trusted Publishing OIDC
         run: npm install -g npm@latest
 
-      - name: Publish @h0wzy/mcp-shared
-        run: npm publish ./shared --access public --provenance || echo "Already published on npm"
+      - name: Run tests before publishing
+        run: npm test
 
-      - name: Publish @h0wzy/mcp-server-antigravity
-        run: npm publish ./servers/antigravity --access public --provenance || echo "Already published on npm"
+      # Order matters: the servers depend on @h0wzy/mcp-shared at the same version.
+      # Only a version that is already on npm is skipped; any other publish error
+      # (auth, OIDC, 403) fails the job instead of being swallowed.
+      - name: Publish packages
+        run: |
+          set -euo pipefail
+          for dir in shared servers/antigravity servers/codex servers/claude servers/team npm; do
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "Skipping $name@$version: already published"
+            else
+              npm publish "./$dir" --access public --provenance
+            fi
+          done
 
-      - name: Publish @h0wzy/mcp-server-codex
-        run: npm publish ./servers/codex --access public --provenance || echo "Already published on npm"
+  # The npm wrapper (@h0wzy/mcp) downloads h0wzy-mcp-<os>-<arch> from the release whose
+  # tag matches its version, and falls back to an old release when the asset is missing.
+  release-binaries:
+    name: 🐹 Attach CLI binaries to the release
+    if: github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
 
-      - name: Publish @h0wzy/mcp
-        run: npm publish ./npm --access public --provenance || echo "Already published on npm"
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+          cache-dependency-path: 'cli/go.sum'
+
+      - name: Run Go tests
+        run: go test ./cli/...
+
+      - name: Build binaries with the release version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          ldflags="-s -w -X github.com/H0wZy/mcp/cli/version.Current=${version}"
+          mkdir -p dist
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$ldflags" -o dist/h0wzy-mcp-windows-amd64.exe ./cli
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$ldflags" -o dist/h0wzy-mcp-linux-amd64 ./cli
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "$ldflags" -o dist/h0wzy-mcp-darwin-arm64 ./cli
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "$ldflags" -o dist/h0wzy-mcp-darwin-amd64 ./cli
+          (cd dist && sha256sum * > checksums.txt)
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" dist/* --clobber --repo "${{ github.repository }}"

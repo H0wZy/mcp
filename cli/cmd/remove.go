@@ -1,73 +1,84 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"io"
+	"strings"
 
 	"github.com/H0wZy/mcp/cli/config"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
 var removeScope string
 
 var removeCmd = &cobra.Command{
-	Use:   "remove <bridge-name>",
+	Use:   "remove <bridge-name | team>",
 	Short: "Unregister and remove an MCP bridge from host agent configuration",
-	Args:  cobra.ExactArgs(1),
+	Long: "Remove a bridge from its host's config. Bridge names: " + strings.Join(config.BridgeNames(), ", ") + ".\n" +
+		"'remove team' removes the team server from every host and the agent-team skill copies hmcp installed.\n" +
+		"--scope applies to Claude Code configs and to skill folders.",
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		bridge := args[0]
-
-		successStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#04B575"))
-		agentStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFFFF"))
-		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
-
-		switch bridge {
-		case "claude-antigravity":
-			if err := config.UnregisterClaudeServer("antigravity", removeScope); err != nil {
-				return err
-			}
-			fmt.Printf("  %s Removed %s from %s configuration %s\n",
-				successStyle.Render("✓"),
-				agentStyle.Render("antigravity"),
-				agentStyle.Render("Claude Code"),
-				dimStyle.Render("("+removeScope+" scope)"),
-			)
-		case "claude-codex":
-			if err := config.UnregisterClaudeServer("codex", removeScope); err != nil {
-				return err
-			}
-			fmt.Printf("  %s Removed %s from %s configuration %s\n",
-				successStyle.Render("✓"),
-				agentStyle.Render("codex"),
-				agentStyle.Render("Claude Code"),
-				dimStyle.Render("("+removeScope+" scope)"),
-			)
-		case "codex-antigravity":
-			if err := config.UnregisterCodexServer("antigravity"); err != nil {
-				return err
-			}
-			fmt.Printf("  %s Removed %s from %s configuration\n",
-				successStyle.Render("✓"),
-				agentStyle.Render("antigravity"),
-				agentStyle.Render("OpenAI Codex"),
-			)
-		case "antigravity-codex":
-			if err := config.UnregisterAntigravityServer("codex"); err != nil {
-				return err
-			}
-			fmt.Printf("  %s Removed %s from %s configuration\n",
-				successStyle.Render("✓"),
-				agentStyle.Render("codex"),
-				agentStyle.Render("Google Antigravity"),
-			)
-		default:
-			return fmt.Errorf("unknown bridge: %s", bridge)
+		out := cmd.OutOrStdout()
+		if args[0] == config.AgentTeam {
+			return runRemoveTeam(out, removeScope)
+		}
+		b, ok := config.LookupBridge(args[0])
+		if !ok {
+			return fmt.Errorf("unknown bridge: %s (valid: %s, team)", args[0], strings.Join(config.BridgeNames(), ", "))
+		}
+		if err := config.RemoveBridge(b.Name, removeScope); err != nil {
+			return err
 		}
 
-		fmt.Println()
-		fmt.Println(dimStyle.Render("💡 Restart your host agent CLI to apply the removal."))
+		scope := ""
+		if b.Host == config.AgentClaude {
+			scope = " " + dimStyle.Render("("+removeScope+" scope)")
+		}
+		fmt.Fprintf(out, "  %s Removed %s from %s configuration%s\n",
+			successStyle.Render("✓"),
+			agentStyle.Render(b.Target),
+			agentStyle.Render(config.AgentDisplayName(b.Host)),
+			scope,
+		)
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, dimStyle.Render("💡 Restart your host agent CLI to apply the removal."))
 		return nil
 	},
+}
+
+// runRemoveTeam removes the team server key from every host config and the
+// skill copies that carry the hmcp marker. Other copies are kept and listed.
+func runRemoveTeam(out io.Writer, scope string) error {
+	var problems []error
+	for _, host := range config.TeamHosts {
+		change, err := config.RemoveTeam(host, scope)
+		if err != nil {
+			problems = append(problems, fmt.Errorf("team (%s): %w", host, err))
+			fmt.Fprintf(out, "  %s Could not fully remove %s from %s\n",
+				warnStyle.Render("✗"), agentStyle.Render(config.TeamServerKey), agentStyle.Render(config.AgentDisplayName(host)))
+		} else {
+			where := ""
+			if host == config.AgentClaude {
+				where = " " + dimStyle.Render("("+scope+" scope)")
+			}
+			fmt.Fprintf(out, "  %s Removed %s from %s configuration%s\n",
+				successStyle.Render("✓"), agentStyle.Render(config.TeamServerKey),
+				agentStyle.Render(config.AgentDisplayName(host)), where)
+		}
+		for _, s := range change.Skills {
+			switch s.Action {
+			case "removed":
+				fmt.Fprintf(out, "    %s\n", dimStyle.Render("removed skill "+s.Path))
+			case "kept":
+				fmt.Fprintf(out, "    %s\n", warnStyle.Render("kept "+s.Path+": "+s.Reason))
+			}
+		}
+	}
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, dimStyle.Render("💡 Restart your host agent CLI to apply the removal."))
+	return errors.Join(problems...)
 }
 
 func init() {

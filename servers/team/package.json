@@ -1,0 +1,33 @@
+{
+  "name": "@h0wzy/mcp-server-team",
+  "version": "1.0.6",
+  "description": "Agent team orchestrator MCP server: lead teams of Claude Code, OpenAI Codex and Google Antigravity teammates from any MCP client",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "agent-team",
+    "multi-agent",
+    "orchestrator",
+    "claude-code",
+    "codex",
+    "antigravity"
+  ],
+  "type": "module",
+  "bin": {
+    "h0wzy-mcp-team": "bin/cli.js"
+  },
+  "main": "./src/index.js",
+  "dependencies": {
+    "@h0wzy/mcp-shared": "1.0.6"
+  },
+  "author": "Marcos (H0wZy) <h0wzymarcos@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/H0wZy/mcp.git",
+    "directory": "servers/team"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

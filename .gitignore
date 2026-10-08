@@ -43,3 +43,6 @@ ehthumbs.db
 # Test coverage
 coverage/
 .nyc_output/
+
+# Agent worktrees (Claude Code subagents)
+.claude/worktrees/

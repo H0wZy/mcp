@@ -1,17 +1,35 @@
 // H0wZy/mcp — OpenAI Codex MCP Server
-// Minimal, DRY bridge exposing OpenAI Codex CLI (GPT-5.6 / GPT-6 Astra) to any MCP client.
+// Minimal, DRY bridge exposing OpenAI Codex CLI (GPT-6 family) to any MCP client.
 
-import { statSync } from 'node:fs';
-import { dirname } from 'node:path';
-import {
+// Installed from npm, @h0wzy/mcp-shared is a real dependency. Run straight from a
+// clone without `npm install`, fall back to the workspace copy of shared/.
+const shared = await import('@h0wzy/mcp-shared').catch((err) => {
+  if (err?.code !== 'ERR_MODULE_NOT_FOUND') throw err;
+  return import('../../../shared/index.js');
+});
+const {
   createMcpServer,
   resolveBinary,
   executeProcess,
   formatResilientResponse,
   createAgentConfig,
-} from '../../../shared/index.js';
+  createConfigureTool,
+  codexMcpArgs,
+  validateCwd,
+  normalizePaths,
+  clampTimeoutMinutes,
+} = shared;
 
 const TIMEOUT_MS = 300000; // 5 minutes
+
+// Sandbox per tool kind, set through config overrides so `exec` and `review` both honor it.
+// Read-only + never-ask is Codex's documented non-interactive read-only combination.
+const ACCESS_OVERRIDES = {
+  'read-only': ['-c', 'sandbox_mode=read-only', '-c', 'approval_policy=never'],
+  'workspace-write': ['-c', 'sandbox_mode=workspace-write'],
+};
+const READ_ONLY_EXEC_ARGS = ['--ephemeral', '--skip-git-repo-check'];
+const READ_ONLY_ANNOTATIONS = { readOnlyHint: true, openWorldHint: true };
 
 async function loadCodexCatalog() {
   const codexBin = resolveBinary('codex', 'CODEX_CLI_PATH');
@@ -55,12 +73,37 @@ export const agentConfig = createAgentConfig({
   catalogLoader: loadCodexCatalog,
 });
 
-async function executeCodexCommand(subcommand, prompt, paths = [], model, effort, extraArgs = [], { cwd, timeoutMs = TIMEOUT_MS } = {}) {
+async function executeCodexCommand(
+  subcommand,
+  prompt,
+  paths,
+  model,
+  effort,
+  extraArgs = [],
+  { cwd, requireCwd = false, access = 'read-only', timeoutMs = TIMEOUT_MS, signal, hop } = {}
+) {
   if (!prompt) {
     return { text: 'Missing required argument: prompt', isError: true };
   }
 
-  const snapshot = agentConfig.resolveCall({ model, effort });
+  let workDir;
+  let contextPaths;
+  try {
+    workDir = cwd !== undefined || requireCwd ? validateCwd(cwd) : undefined;
+    contextPaths = normalizePaths(paths, workDir);
+  } catch (err) {
+    return { text: `❌ ${err.message}`, isError: true };
+  }
+
+  let snapshot;
+  try {
+    snapshot = agentConfig.resolveCall({ model, effort });
+  } catch (err) {
+    return {
+      isError: true,
+      text: `❌ ${err.message}\n💡 Call configure_codex with action "list" for valid models and efforts, or "reset" to restore the defaults.`,
+    };
+  }
 
   const codexBin = resolveBinary('codex', 'CODEX_CLI_PATH');
   if (!codexBin) {
@@ -74,9 +117,11 @@ async function executeCodexCommand(subcommand, prompt, paths = [], model, effort
     };
   }
 
-  const fullPrompt = paths.length
-    ? `Context files/directories to inspect in full:\n${paths.map((p) => `- ${p}`).join('\n')}\n\n${prompt}`
+  const withContext = contextPaths.length
+    ? `Context files/directories to inspect in full:\n${contextPaths.map((p) => `- ${p.path}`).join('\n')}\n\n${prompt}`
     : prompt;
+  // L3: tell the agent where it sits in the chain (spec 006).
+  const fullPrompt = hop ? `${hop.notice}\n\n${withContext}` : withContext;
 
   // For all subcommands, override model and reasoning effort via -c key=value
   const args = [
@@ -86,25 +131,29 @@ async function executeCodexCommand(subcommand, prompt, paths = [], model, effort
     `model=${snapshot.cliModel}`,
     '-c',
     `model_reasoning_effort=${snapshot.cliEffort}`,
+    ...ACCESS_OVERRIDES[access],
+    // FR-026: the user's other MCP servers stay off (they doubled start-up time), and
+    // at the maximum depth the bridges go too (L1).
+    ...codexMcpArgs({ atMaxDepth: hop?.atMaxDepth, readOnly: access === 'read-only' }),
     '-',
   ];
 
   if (subcommand === 'exec') {
+    // No --add-dir for context paths: it makes a folder *writable* (codex exec --help),
+    // and both sandboxes can already read the whole disk.
     args.push('--color', 'never', ...extraArgs);
-
-    for (const p of paths) {
-      try {
-        const isDir = statSync(p).isDirectory();
-        args.push('--add-dir', isDir ? p : dirname(p));
-      } catch {
-        /* skip invalid path */
-      }
-    }
-
-    if (cwd) args.push('-C', cwd);
+    if (workDir) args.push('-C', workDir);
   }
 
-  const res = await executeProcess(codexBin, args, { cwd, timeoutMs, toolName: 'codex', input: fullPrompt });
+  const res = await executeProcess(codexBin, args, {
+    cwd: workDir,
+    timeoutMs: hop ? hop.capTimeoutMs(timeoutMs) : timeoutMs,
+    signal,
+    toolName: 'codex',
+    input: fullPrompt,
+    env: hop?.childEnv,
+    onSpawn: hop ? (child) => hop.registerAgent(child.pid) : undefined,
+  });
   const footer = agentConfig.formatFooter(snapshot);
 
   if (res.ok) {
@@ -123,98 +172,33 @@ async function executeCodexCommand(subcommand, prompt, paths = [], model, effort
   return {
     text: formatted.text + footer,
     isError: true,
+    outcome: res.timedOut ? 'timed-out' : 'failed',
   };
 }
 
-export const configureCodexTool = {
+export const configureCodexTool = createConfigureTool({
   name: 'configure_codex',
+  label: 'OpenAI Codex',
+  agentConfig,
   description:
     'Inspect or change OpenAI Codex model and reasoning effort for the current session. ' +
     'Supports pre-configured tiers ("light" for quick lookups, "balanced" for routine work, "deep" for complex refactoring/architecture/security), ' +
     'explicit models (e.g. "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-terra"), or custom efforts ("low"|"medium"|"high"|"xhigh"|"max"|"ultra"). ' +
     'Actions: "get" (view active settings), "set" (apply updates), "reset" (restore startup defaults), "list" (catalog & tiers). ' +
     'Claude Code may switch tiers autonomously based on task difficulty.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      action: {
-        type: 'string',
-        enum: ['get', 'set', 'reset', 'list'],
-        default: 'get',
-        description: 'Action to perform. Default is "get" (read current state without modifying).',
-      },
-      tier: {
-        type: 'string',
-        enum: ['light', 'balanced', 'deep'],
-        description: 'Preset tier: "light" (gpt-6-luna low), "balanced" (gpt-6-astra medium), "deep" (gpt-6-astra xhigh).',
-      },
-      model: {
-        type: 'string',
-        description: 'Model slug (e.g. "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-terra").',
-      },
-      effort: {
-        type: 'string',
-        enum: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
-        description: 'Reasoning effort level. Automatically mapped to supported levels.',
-      },
-    },
-  },
-  handler: (args = {}) => {
-    const action = (args.action || 'get').toLowerCase();
-
-    if (action === 'get') {
-      const state = agentConfig.get();
-      return (
-        `⚙️ [OpenAI Codex Active Configuration]\n` +
-        `Model:  ${state.active.model}\n` +
-        `Effort: ${state.active.effort}` +
-        (state.active.tier ? ` (Tier: ${state.active.tier})` : '') +
-        `\nSource: ${state.active.source}\n\n` +
-        JSON.stringify(state, null, 2)
-      );
-    }
-
-    if (action === 'set') {
-      const updated = agentConfig.set(args);
-      let summary =
-        `⚙️ [OpenAI Codex Configuration Updated]\n` +
-        `Previous: ${updated.previous.model} (effort: ${updated.previous.effort}, source: ${updated.previous.source})\n` +
-        `Active:   ${updated.active.model} (effort: ${updated.active.effort}, source: ${updated.active.source})\n`;
-
-      if (updated.warnings && updated.warnings.length > 0) {
-        summary += `⚠️ Warnings:\n  - ${updated.warnings.join('\n  - ')}\n`;
-      }
-      return summary + '\n' + JSON.stringify(updated, null, 2);
-    }
-
-    if (action === 'reset') {
-      const resetState = agentConfig.reset();
-      return (
-        `🔄 [OpenAI Codex Configuration Reset to Startup Defaults]\n` +
-        `Active: ${resetState.active.model} (effort: ${resetState.active.effort}, source: startup)\n\n` +
-        JSON.stringify(resetState, null, 2)
-      );
-    }
-
-    if (action === 'list') {
-      const catalog = agentConfig.list();
-      return (
-        `📋 [OpenAI Codex Model Catalog & Tiers]\n` +
-        `Catalog Source: ${catalog.catalogSource} (status: ${catalog.catalogStatus})\n\n` +
-        JSON.stringify(catalog, null, 2)
-      );
-    }
-
-    throw new Error(`Unsupported action '${action}'. Valid actions: get, set, reset, list`);
-  },
-};
+  tierDescription: 'Preset tier: "light" (gpt-6-luna low), "balanced" (gpt-6-astra medium), "deep" (gpt-6-astra xhigh).',
+  modelDescription: 'Model slug (e.g. "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-terra").',
+  efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+});
 
 export const askCodexTool = {
   name: 'ask_codex',
+  spawnsAgent: true,
   description:
-    'Ask OpenAI Codex CLI for an independent second opinion, reasoning check, or advice. ' +
+    'Ask OpenAI Codex CLI for an independent second opinion, reasoning check, or advice (read-only sandbox). ' +
     'Uses session-configured model & effort by default (configure via configure_codex). ' +
     'Provide a `prompt`; optionally pass `paths`, `model`, or `effort`.',
+  annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
     properties: {
@@ -239,19 +223,25 @@ export const askCodexTool = {
     },
     required: ['prompt'],
   },
-  handler: ({ prompt, paths, model, effort }) =>
-    executeCodexCommand('exec', prompt, paths, model, effort, [
-      '--ephemeral',
-      '--skip-git-repo-check',
-      '--approve-for-me',
-    ]),
+  handler: ({ prompt, paths, model, effort }, ctx) =>
+    executeCodexCommand(
+      'exec',
+      prompt,
+      paths,
+      model,
+      effort,
+      READ_ONLY_EXEC_ARGS,
+      { signal: ctx?.signal, hop: ctx?.hop }
+    ),
 };
 
 export const reviewCodexTool = {
   name: 'review_codex',
+  spawnsAgent: true,
   description:
-    'Run a structured code review using OpenAI Codex CLI against the current repository or specified files. ' +
+    'Run a structured code review using OpenAI Codex CLI against the current repository or specified files (read-only sandbox). ' +
     'Uses session-configured model & effort by default (configure via configure_codex).',
+  annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
     properties: {
@@ -276,16 +266,18 @@ export const reviewCodexTool = {
     },
     required: ['prompt'],
   },
-  handler: ({ prompt, paths, model, effort }) =>
-    executeCodexCommand('review', prompt, paths, model, effort),
+  handler: ({ prompt, paths, model, effort }, ctx) =>
+    executeCodexCommand('review', prompt, paths, model, effort, [], { signal: ctx?.signal, hop: ctx?.hop }),
 };
 
 export const brainstormCodexTool = {
   name: 'brainstorm_codex',
+  spawnsAgent: true,
   description:
     'Architectural brainstorming and ideation using OpenAI Codex. ' +
     'Explores alternative patterns, system trade-offs, and design approaches. ' +
     'Configure model and effort via configure_codex.',
+  annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
     properties: {
@@ -310,22 +302,25 @@ export const brainstormCodexTool = {
     },
     required: ['prompt'],
   },
-  handler: ({ prompt, paths, model, effort }) =>
+  handler: ({ prompt, paths, model, effort }, ctx) =>
     executeCodexCommand(
       'exec',
       `You are an enterprise software architect. Analyze the problem, brainstorm 2-3 viable architectural alternatives, outline trade-offs and pros/cons for each, and recommend the best path forward.\n\nProblem: ${prompt}`,
       paths,
       model,
       effort,
-      ['--ephemeral', '--skip-git-repo-check', '--approve-for-me']
+      READ_ONLY_EXEC_ARGS,
+      { signal: ctx?.signal, hop: ctx?.hop }
     ),
 };
 
 export const planCodexTool = {
   name: 'plan_codex',
+  spawnsAgent: true,
   description:
     'Generate a structured, step-by-step implementation plan or execution checklist using OpenAI Codex. ' +
     'Configure model and effort via configure_codex.',
+  annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
     properties: {
@@ -350,23 +345,26 @@ export const planCodexTool = {
     },
     required: ['prompt'],
   },
-  handler: ({ prompt, paths, model, effort }) =>
+  handler: ({ prompt, paths, model, effort }, ctx) =>
     executeCodexCommand(
       'exec',
       `You are a lead technical planner. Break down the requested goal into structured, dependency-ordered, verifiable implementation tasks with concrete file paths and test steps.\n\nGoal: ${prompt}`,
       paths,
       model,
       effort,
-      ['--ephemeral', '--skip-git-repo-check', '--approve-for-me']
+      READ_ONLY_EXEC_ARGS,
+      { signal: ctx?.signal, hop: ctx?.hop }
     ),
 };
 
 export const delegateCodexTool = {
   name: 'delegate_codex',
+  spawnsAgent: true,
   description:
     'Hand a self-contained implementation task to OpenAI Codex, which EDITS FILES inside `cwd` ' +
     '(workspace-write sandbox, approvals routed to automatic review). Review the diff afterwards. Returns the final report from Codex. ' +
     'Configure model and effort via configure_codex.',
+  annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   inputSchema: {
     type: 'object',
     properties: {
@@ -383,10 +381,14 @@ export const delegateCodexTool = {
     },
     required: ['prompt', 'cwd'],
   },
-  handler: ({ prompt, cwd, paths, model, effort, timeout_minutes }) =>
+  handler: ({ prompt, cwd, paths, model, effort, timeout_minutes }, ctx) =>
     executeCodexCommand('exec', prompt, paths, model, effort, ['--ephemeral', '--skip-git-repo-check', '--approve-for-me'], {
       cwd,
-      timeoutMs: Math.min(Math.max(Math.round(timeout_minutes || 30), 1), 60) * 60000,
+      requireCwd: true,
+      access: 'workspace-write',
+      timeoutMs: clampTimeoutMinutes(timeout_minutes) * 60000,
+      signal: ctx?.signal,
+      hop: ctx?.hop,
     }),
 };
 

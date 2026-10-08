@@ -5,14 +5,17 @@ import (
 	"os"
 	"strings"
 
+	"github.com/H0wZy/mcp/cli/version"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/term"
 )
 
-const (
-	AppVersion  = "v1.0.5"
-	BannerWidth = 75
-)
+const BannerWidth = 75
+
+// AppVersion is the version shown in the banner; release builds set version.Current.
+func AppVersion() string {
+	return "v" + strings.TrimPrefix(version.Current, "v")
+}
 
 // Static, zero-dependency 3D blocky ASCII art for "H0wZy MCP" (Claude Code CLI style with V2 slashed zero and aligned P)
 const asciiBanner = `██╗  ██╗ ██████╗ ██╗    ██╗███████╗██╗   ██╗  ███╗   ███╗  ██████╗ ███████╗
@@ -65,7 +68,7 @@ func GetTerminalWidth() int {
 // RenderCompactHeader renders a clean single-line header for narrow terminals.
 func RenderCompactHeader() string {
 	return compactStyle.Render("H0wZy/mcp") + " " +
-		metaStyle.Render(AppVersion) + " — " +
+		metaStyle.Render(AppVersion()) + " — " +
 		tagStyle.Render("The Ultimate Multi-Agent MCP Hub")
 }
 
@@ -91,7 +94,7 @@ func renderBanner(width int, isTTY bool) string {
 		sb.WriteString("\n")
 	}
 	sb.WriteString("\n")
-	sb.WriteString("  " + tagStyle.Render("H0wZy/mcp") + " " + metaStyle.Render(AppVersion+" • Multi-Agent MCP Hub"))
+	sb.WriteString("  " + tagStyle.Render("H0wZy/mcp") + " " + metaStyle.Render(AppVersion()+" • Multi-Agent MCP Hub"))
 	sb.WriteString("\n")
 	sb.WriteString("  " + metaStyle.Render("Claude Code  ↔  OpenAI Codex  ↔  Google Antigravity"))
 	sb.WriteString("\n")

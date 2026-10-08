@@ -112,25 +112,17 @@ func RunInteractive() error {
 	fmt.Println()
 
 	// 2. Build available bridge options
-	var bridgeOptions []huh.Option[string]
-
-	if detectedMap["claude"].Installed && detectedMap["agy"].Installed {
-		bridgeOptions = append(bridgeOptions, huh.NewOption("Claude Code ↔ Google Antigravity (Gemini 3.1 Pro/Flash)", "claude-antigravity"))
+	installedAgents := map[string]bool{
+		config.AgentClaude:      detectedMap["claude"].Installed,
+		config.AgentCodex:       detectedMap["codex"].Installed,
+		config.AgentAntigravity: detectedMap["agy"].Installed,
 	}
-	if detectedMap["claude"].Installed && detectedMap["codex"].Installed {
-		bridgeOptions = append(bridgeOptions, huh.NewOption("Claude Code ↔ OpenAI Codex (GPT-5.6 / GPT-6 Astra)", "claude-codex"))
-	}
-	if detectedMap["codex"].Installed && detectedMap["agy"].Installed {
-		bridgeOptions = append(bridgeOptions, huh.NewOption("OpenAI Codex ↔ Google Antigravity (Gemini 3.1)", "codex-antigravity"))
-	}
-	if detectedMap["agy"].Installed && detectedMap["codex"].Installed {
-		bridgeOptions = append(bridgeOptions, huh.NewOption("Google Antigravity ↔ OpenAI Codex", "antigravity-codex"))
-	}
+	bridgeOptions := bridgeOptionsFor(installedAgents)
 
 	if len(bridgeOptions) == 0 {
 		warnStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFA500"))
-		fmt.Println(warnStyle.Render("⚠️  No pairs of supported CLIs found on this machine to interconnect."))
-		fmt.Println(dimStyle.Render("   Install at least two of: Claude Code, OpenAI Codex, or Google Antigravity."))
+		fmt.Println(warnStyle.Render("⚠️  No supported CLIs found on this machine."))
+		fmt.Println(dimStyle.Render("   Install at least one of: Claude Code, OpenAI Codex, or Google Antigravity."))
 		return nil
 	}
 
@@ -178,60 +170,89 @@ func RunInteractive() error {
 	fmt.Println("\n" + lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#C084FC")).Render("⚡ Applying configuration..."))
 	arrowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#A855F7"))
 
-	for _, bridge := range selectedBridges {
-		switch bridge {
-		case "claude-antigravity":
-			serverCmd, serverArgs := config.ResolveServerScript("antigravity")
-			if err := config.RegisterClaudeServerCommand("antigravity", serverCmd, serverArgs, selectedScope); err != nil {
-				fmt.Printf("  %s Failed to register claude-antigravity: %v\n", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#EF4444")).Render("✗"), err)
-			} else {
-				fmt.Printf("  %s Connected: %s %s %s\n",
-					successStyle.Render("✓"),
-					lipgloss.NewStyle().Bold(true).Render("Claude Code"),
-					arrowStyle.Render("↔"),
-					lipgloss.NewStyle().Bold(true).Render("Google Antigravity"),
-				)
+	failed := false
+	for _, name := range selectedBridges {
+		if name == config.AgentTeam {
+			for _, host := range config.TeamHosts {
+				if !installedAgents[host] {
+					continue
+				}
+				change, err := config.InstallTeam(host, selectedScope)
+				if err != nil {
+					failed = true
+					fmt.Printf("  %s Failed to install the team in %s: %v\n", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#EF4444")).Render("✗"), config.AgentDisplayName(host), err)
+					continue
+				}
+				fmt.Printf("  %s %s: team server + skill %s\n", successStyle.Render("✓"),
+					lipgloss.NewStyle().Bold(true).Render(config.AgentDisplayName(host)), dimStyle.Render("("+config.SkillTrigger(host)+")"))
+				for _, s := range change.Skills {
+					if s.Action == "skipped" {
+						fmt.Println("    " + dimStyle.Render("skipped: "+s.Reason))
+					}
+				}
 			}
-		case "claude-codex":
-			serverCmd, serverArgs := config.ResolveServerScript("codex")
-			if err := config.RegisterClaudeServerCommand("codex", serverCmd, serverArgs, selectedScope); err != nil {
-				fmt.Printf("  %s Failed to register claude-codex: %v\n", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#EF4444")).Render("✗"), err)
-			} else {
-				fmt.Printf("  %s Connected: %s %s %s\n",
-					successStyle.Render("✓"),
-					lipgloss.NewStyle().Bold(true).Render("Claude Code"),
-					arrowStyle.Render("↔"),
-					lipgloss.NewStyle().Bold(true).Render("OpenAI Codex"),
-				)
+			continue
+		}
+		b, _ := config.LookupBridge(name)
+		if err := config.InstallBridge(name, selectedScope); err != nil {
+			failed = true
+			fmt.Printf("  %s Failed to register %s: %v\n", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#EF4444")).Render("✗"), name, err)
+			continue
+		}
+		fmt.Printf("  %s Connected: %s %s %s\n",
+			successStyle.Render("✓"),
+			lipgloss.NewStyle().Bold(true).Render(config.AgentDisplayName(b.Host)),
+			arrowStyle.Render("→"),
+			lipgloss.NewStyle().Bold(true).Render(config.AgentDisplayName(b.Target)),
+		)
+	}
+
+	// The developer picked these bridges explicitly, so cycles are not refused
+	// here; they are pointed out together with the loop guard that limits them.
+	if installed, err := config.InstalledBridges(); err == nil {
+		if cycles := config.Cycles(installed); len(cycles) > 0 {
+			fmt.Println("\n" + lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#C084FC")).Render("🔁 Your bridges form cycles:"))
+			for _, c := range cycles {
+				fmt.Println("  " + config.FormatCycle(c))
 			}
-		case "codex-antigravity":
-			serverCmd, serverArgs := config.ResolveServerScript("antigravity")
-			if err := config.RegisterCodexServerCommand("antigravity", serverCmd, serverArgs); err != nil {
-				fmt.Printf("  %s Failed to register codex-antigravity: %v\n", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#EF4444")).Render("✗"), err)
-			} else {
-				fmt.Printf("  %s Connected: %s %s %s\n",
-					successStyle.Render("✓"),
-					lipgloss.NewStyle().Bold(true).Render("OpenAI Codex"),
-					arrowStyle.Render("↔"),
-					lipgloss.NewStyle().Bold(true).Render("Google Antigravity"),
-				)
-			}
-		case "antigravity-codex":
-			serverCmd, serverArgs := config.ResolveServerScript("codex")
-			if err := config.RegisterAntigravityServerCommand("codex", serverCmd, serverArgs); err != nil {
-				fmt.Printf("  %s Failed to register antigravity-codex: %v\n", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#EF4444")).Render("✗"), err)
-			} else {
-				fmt.Printf("  %s Connected: %s %s %s\n",
-					successStyle.Render("✓"),
-					lipgloss.NewStyle().Bold(true).Render("Google Antigravity"),
-					arrowStyle.Render("↔"),
-					lipgloss.NewStyle().Bold(true).Render("OpenAI Codex"),
-				)
-			}
+			defaults := config.LoadGuardPolicy(func(string) string { return "" })
+			fmt.Println(dimStyle.Render("🛡  The loop guard limits them (" + defaults.Summary() + "). Run 'hmcp doctor' to review."))
 		}
 	}
 
-	fmt.Println("\n" + successStyle.Render("✅ All selected bridges configured successfully!"))
+	if failed {
+		fmt.Println("\n" + lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFA500")).Render("⚠️  Some bridges could not be configured. See the errors above."))
+	} else {
+		fmt.Println("\n" + successStyle.Render("✅ All selected bridges configured successfully!"))
+	}
 	fmt.Println(dimStyle.Render("💡 Restart your host agent CLI to activate the newly connected tools."))
 	return nil
+}
+
+// bridgeOptionLabels describe each direction in the bridge picker.
+var bridgeOptionLabels = map[string]string{
+	"claude-antigravity": "Claude Code → Google Antigravity (Gemini)",
+	"claude-codex":       "Claude Code → OpenAI Codex (GPT-6)",
+	"codex-antigravity":  "OpenAI Codex → Google Antigravity (Gemini)",
+	"codex-claude":       "OpenAI Codex → Claude Code (Opus)",
+	"antigravity-codex":  "Google Antigravity → OpenAI Codex (GPT-6)",
+	"antigravity-claude": "Google Antigravity → Claude Code (Opus)",
+}
+
+// bridgeOptionsFor lists, in install order, the directions whose host and
+// target agents are both installed, then the agent team when any agent is.
+func bridgeOptionsFor(installed map[string]bool) []huh.Option[string] {
+	var options []huh.Option[string]
+	for _, b := range config.Bridges {
+		if installed[b.Host] && installed[b.Target] {
+			options = append(options, huh.NewOption(bridgeOptionLabels[b.Name], b.Name))
+		}
+	}
+	for _, h := range config.TeamHosts {
+		if installed[h] {
+			options = append(options, huh.NewOption("Agent team server + agent-team skill (every detected CLI)", config.AgentTeam))
+			break
+		}
+	}
+	return options
 }

@@ -11,8 +11,8 @@ func TestRenderCompactHeader(t *testing.T) {
 	if !strings.Contains(header, "H0wZy/mcp") {
 		t.Errorf("Expected header to contain 'H0wZy/mcp', got: %s", header)
 	}
-	if !strings.Contains(header, AppVersion) {
-		t.Errorf("Expected header to contain version '%s', got: %s", AppVersion, header)
+	if !strings.Contains(header, AppVersion()) {
+		t.Errorf("Expected header to contain version '%s', got: %s", AppVersion(), header)
 	}
 }
 
@@ -48,7 +48,7 @@ func TestRenderBanner_WideTerminal(t *testing.T) {
 	if !strings.Contains(result, "Claude Code") || !strings.Contains(result, "OpenAI Codex") || !strings.Contains(result, "Google Antigravity") {
 		t.Errorf("Expected metadata in wide banner, got: %s", result)
 	}
-	if !strings.Contains(result, AppVersion) {
+	if !strings.Contains(result, AppVersion()) {
 		t.Errorf("Expected AppVersion in banner, got: %s", result)
 	}
 }
