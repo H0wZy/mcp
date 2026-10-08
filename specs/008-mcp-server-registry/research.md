@@ -27,7 +27,7 @@ Verified on a real installation (key names only):
 | Antigravity | `~/.gemini/config/mcp_config.json` → `mcpServers.<name>` | `{"command":…,"args":[…]}` | `{"serverUrl":…}` |
 
 - Registered servers get **no** `--host` argument, chain `env_vars` or long timeouts: those belong to the H0wZy/mcp bridges (`withHostArg`, `CodexChainEnvVars`). The existing `Register*ServerCommand` helpers add them, so the registry has its own small render/merge functions.
-- Environment variable names (FR-003) map to Codex `env_vars`, the allow-list Codex forwards to a stdio server. Claude Code and Antigravity start stdio servers with their own environment, so they need no field. Quickstart step 6 checks this on Antigravity. Env names on a URL entry are refused: a URL server does not receive the client's environment.
+- Environment variable names (FR-003) map to Codex `env_vars`, the allow-list Codex forwards to a stdio server. Claude Code and Antigravity start stdio servers with their own environment, so they need no field. Verified 2026-10-08 (quickstart step 6, Claude Code 2.1.294, Codex 0.161.0, agy 1.3.1): a stdio server started by `claude` and by `agy -p` saw the variable set in the launching shell, and Codex forwarded it through `env_vars`. Env names on a URL entry are refused: a URL server does not receive the client's environment.
 - Claude Code's file is resolved from `os.UserHomeDir()`, like `hmcp install` (`CLAUDE_CONFIG_DIR` is not honored by the Go writers today; keeping one behavior across `hmcp` commands).
 
 ## D4. Writing without losing user content (FR-008, SC-003)

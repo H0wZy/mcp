@@ -198,7 +198,7 @@ Go CLI module at `cli/` (`github.com/H0wZy/mcp/cli`). Store and client logic in 
 - [X] T032 [P] Update `AGENTS.md`: mention `hmcp registry` in the `cli/` row of the layout table and add spec 008 to "Current roadmap".
 - [X] T033 Privacy sweep (SC-005): grep the branch diff (`git diff main...HEAD`) for anything that is not a placeholder (hosts, tailnet names, real server names, user paths such as `C:\Users\` or `/home/`); fix any hit.
 - [X] T034 Run the full checks required before a commit: `npm test`, `go vet ./cli/...`, `go test ./cli/...`.
-- [ ] T035 Walk through [quickstart.md](quickstart.md) on the developer's machine with a throwaway server (needs the real clients, so the developer runs or approves it). Record the Antigravity environment result of quickstart step 6 in research D3.
+- [X] T035 Walk through [quickstart.md](quickstart.md) on the developer's machine with a throwaway server (needs the real clients, so the developer runs or approves it). Record the Antigravity environment result of quickstart step 6 in research D3.
 
 ---
 
