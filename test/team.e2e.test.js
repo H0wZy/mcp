@@ -53,7 +53,7 @@ async function waitUntil(client, predicate, { rounds = 20 } = {}) {
 }
 
 test('a mixed-vendor team spawns at once, works in parallel and reports compact results', async () => {
-  const { client, project, cleanup } = startTeam({ FAKE_TEAMMATE_SLEEP_MS: '1500', FAKE_TEAMMATE_TEXT: 'X'.repeat(300), FAKE_AGENT_LOG: fakes.claude.log });
+  const { client, project, cleanup } = startTeam({ FAKE_TEAMMATE_SLEEP_MS: '5000', FAKE_TEAMMATE_TEXT: 'X'.repeat(300), FAKE_AGENT_LOG: fakes.claude.log });
   try {
     let res = await client.call('team_create', { name: 'squad', cwd: project, limits: { result_cap_chars: 120 } });
     assert.equal(res.isError, false, res.text);
@@ -69,11 +69,13 @@ test('a mixed-vendor team spawns at once, works in parallel and reports compact 
     });
     assert.match(res.text, /Created A, B, C/);
 
-    const started = Date.now();
     const spawnRev = await client.call('team_spawn', { name: 'rev', agent: 'codex', role: 'security reviewer', tier: 'deep', task_id: 'A' });
     const spawnArch = await client.call('team_spawn', { name: 'arch', agent: 'antigravity', role: 'architect', tier: 'balanced', task_id: 'B' });
     const spawnWriter = await client.call('team_spawn', { name: 'writer', agent: 'claude', role: 'writes the summary', tier: 'light', task_id: 'C' });
-    assert.ok(Date.now() - started < 3000, 'spawns must return before the teammates finish');
+    // Spawns return while the teammates still work (state, not wall-clock: CI runners are slow).
+    const during = await client.call('team_status');
+    assert.match(during.text, /A \[in_progress\] @rev/, 'spawns must return before the teammates finish');
+    assert.match(during.text, /B \[in_progress\] @arch/, 'spawns must return before the teammates finish');
     assert.match(spawnRev.text, /^Spawned rev \(codex gpt-6-astra\/xhigh, read-only\) — working on A\./);
     assert.match(spawnArch.text, /^Spawned arch \(antigravity gemini-3\.8-flash\/medium, read-only\) — working on B\./);
     assert.match(spawnWriter.text, /^Spawned writer \(claude sonnet\/low, read-only\) — waiting for C\./);
