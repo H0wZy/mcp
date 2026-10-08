@@ -286,6 +286,26 @@ See [`servers/team/README.md`](servers/team/README.md) for every tool and settin
 
 ---
 
+## 🗂️ Your own MCP servers (spec 008)
+
+`hmcp registry` keeps one list of the MCP servers **you** build or run, and writes each into Claude Code (user scope), Codex and Antigravity. Move a server once, and every agent follows:
+
+```bash
+hmcp registry add my-server --url http://<host>:<port>/my-server/mcp
+hmcp registry add my-local-server --env MY_TOKEN -- node <path>/server.js --stdio
+hmcp registry update my-local-server -- node <new path>/server.js --stdio   # every client follows
+hmcp registry status                       # in sync / differs / missing, and whether URLs answer
+hmcp registry apply [name…] [--codex-project] [--replace]
+hmcp registry list | remove <name>
+```
+
+- **Private by design**: the registry lives in `~/.h0wzy-mcp/registry.json` (or `$H0WZY_MCP_REGISTRY`), never in a repository. It holds names, targets and env var *names*, never secret values.
+- **Only what it manages**: hmcp touches only the client entries it wrote or adopted. A hand-made entry with the same target is adopted, and one that points elsewhere is reported as a conflict until you pass `--replace`. Other keys you add to an entry (`env`, `headers`, …) are kept.
+- **`--clients claude,codex`** keeps a server out of Antigravity, which calls its MCP tools without asking. `--no-apply` changes the registry only.
+- Agents started by a bridge don't load these servers unless `H0WZY_MCP_USER_SERVERS=1` (see above).
+
+---
+
 ## 🔒 Security & Privacy
 
 H0wZy/mcp is built with privacy and execution safety as first-class guarantees:

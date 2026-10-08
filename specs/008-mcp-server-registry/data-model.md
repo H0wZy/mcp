@@ -84,11 +84,13 @@ Computed by `status` and by every apply; definitions in research D5.
              ▼                                              │
  missing ──write──▶ in sync ──hand edit──▶ differs ──apply──┘
                        ▲
- unmanaged, same target ──adopt──┘
- unmanaged, other target ──▶ conflict ──(apply --replace)──▶ in sync
- config unparsable ──▶ unreadable (nothing written)
+ not managed (same target) ──adopt──┘
+ hand entry, other target ──▶ conflict ──(apply --replace)──▶ in sync
+ config unparsable, or Codex entry outside a plain section ──▶ unreadable (nothing written)
  client not installed ──▶ not installed (skipped)
 ```
+
+States (`DestinationState` in `cli/config/registry_clients.go`): `in sync`, `differs`, `missing`, `not managed`, `conflict`, `unreadable`, `not installed`.
 
 Owned fields compared for "in sync" / "differs" (research D4):
 

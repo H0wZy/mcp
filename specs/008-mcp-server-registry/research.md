@@ -36,7 +36,7 @@ Verified on a real installation (key names only):
   - JSON clients: edit the entry map in place (`readJSONObject` / `writeJSONObject`, which already refuses invalid JSON and writes atomically).
   - Codex: rebuild the `[mcp_servers.<name>]` section from its current lines, dropping owned keys (including multi-line arrays) and emitting fresh owned keys first; other keys and sub-tables such as `[mcp_servers.<name>.env]` stay. Removal uses the existing `removeTOMLSection` (section plus sub-tables).
 - **Rationale**: adopted hand-written entries often carry extras (an `env` block with a secret, `headers`). Replacing the whole entry would delete them silently, which is the exact failure FR-008 forbids.
-- **Codex parse check**: hmcp has no TOML library (and adds none). The writer refuses a Codex file when the existing line parser reports a problem in any `[mcp_servers.*]` section (`codexBridgeEdges` already collects such problems); the rest of the file is passed through byte-for-byte.
+- **Codex parse check**: hmcp has no TOML library (and adds none). The writer refuses a Codex file when the line parser (`parseCodexServers`) reports a problem in any `[mcp_servers.*]` section, and when the server is defined anywhere but a plain `[mcp_servers.<name>]` section: an inline table under `[mcp_servers]`, a dotted key (`mcp_servers.<name>.url = …`) or a quoted header. Appending a section there would duplicate the key and make the file invalid for Codex. The rest of the file is passed through unchanged.
 - **Alternatives**: replace the whole entry (loses user keys); add a TOML module (new dependency for one file, and a re-serializer would reorder and strip the user's comments).
 
 ## D5. Same target, drift and conflict (FR-007, FR-009)
@@ -50,7 +50,7 @@ Verified on a real installation (key names only):
   | absent | yes | — | missing | write (re-create), keep record |
   | present | yes | owned fields equal | in sync | nothing |
   | present | yes | owned fields differ | differs | rewrite owned fields |
-  | present | no | same target | adoptable (reported as *in sync* + "not yet managed") | record (adopt), rewrite owned fields if they differ |
+  | present | no | same target | not managed | record (adopt), rewrite owned fields if they differ |
   | present | no | different target | conflict | skip and report; `--replace` rewrites and records |
 
 - Plus two non-entry states: **not installed** (client binary not detected: skip with a notice, FR-004 / US1-3) and **unreadable** (config fails to parse: refuse that file, report, continue with the others).
@@ -84,7 +84,9 @@ Verified on a real installation (key names only):
 - **Command**: non-empty argv, stored as a list, never joined into a shell string.
 - **Env names**: `^[A-Za-z_][A-Za-z0-9_]*$`; anything with `=` is refused with "names only, never values".
 - **Warnings, not errors** (FR-011): URL path not of the form `/<segment>/mcp` (optional trailing `/`); two entries with the same scheme + host + port + path.
-- **Antigravity notice** (FR-012), on `add`/`update`/`apply` whenever an Antigravity destination is written: "Antigravity can call my-server's tools without asking. To leave it out: hmcp registry update my-server --clients claude,codex".
+- **Antigravity notice** (FR-012), on `add`/`update`/`apply` whenever an Antigravity destination ends in sync (written, adopted or already there): "Antigravity can call my-server's tools without asking. To leave it out: hmcp registry update my-server --clients claude,codex".
+
+- Claude `type`: a URL entry is written as `type = "http"` (streamable HTTP, which the `/<tool>/mcp` convention serves). `type` is not compared, so adopting an `sse` entry leaves it as it is until the next write.
 
 ## D11. Partial failures
 

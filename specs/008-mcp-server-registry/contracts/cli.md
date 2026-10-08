@@ -6,7 +6,7 @@ CLI contract for spec 008. Placeholders only (FR-014). Alias: `hmcp reg`.
 
 - Every writing subcommand prints one line per destination touched: `claude ✓ written`, `codex ✓ in sync`, `antigravity ! conflict (…)`, `codex(<project>) ✗ unreadable: …`, `antigravity – not installed, skipped`.
 - Exit code `0` when every destination ended in sync (or was skipped as not installed); `1` when any destination failed, was left in conflict, or input was invalid. Warnings never change the exit code.
-- The Antigravity notice (FR-012) is printed whenever an Antigravity destination is written.
+- The Antigravity notice (FR-012) is printed whenever an Antigravity destination ends in sync (written, adopted or already there).
 - Nothing is ever passed to a shell. No secret value is printed: hmcp stores none.
 
 ## `hmcp registry add <name> (--url <url> | -- <command> [args…])`
@@ -53,14 +53,14 @@ Re-syncs the named entries (all when none named) into every wanted destination (
 
 ## `hmcp registry status`
 
-Read-only (FR-009). One row per entry × destination with the state from data-model.md, plus `answers` / `unreachable` for URL entries (3 s timeout, concurrent). Ends with the warnings of research D10 (path convention, shared host+path, registry inside a git work tree). Exit `0` when everything is in sync, `1` otherwise, so it can gate scripts.
+Read-only (FR-009). One row per entry × destination with the state from data-model.md (`in sync`, `differs (<fields>)`, `missing`, `not managed`, `conflict`, `unreadable`, `not installed`), plus `answers` / `unreachable` for URL entries (3 s timeout, concurrent). Ends with the warnings of research D10 (path convention, shared host+path, registry inside a git work tree). Exit `0` when everything is in sync, `1` otherwise, so it can gate scripts.
 
 ```text
 $ hmcp registry status
 my-server  http://<host>:<port>/my-server/mcp  answers
   claude       in sync
   codex        differs (url)
-  antigravity  not in clients
+  antigravity  missing
 ```
 
 ## Environment

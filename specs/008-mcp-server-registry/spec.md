@@ -104,7 +104,7 @@ For a server only one project needs, the developer applies a registered server t
 - **FR-007**: When a client already has an entry with the same name that hmcp did not create:
   - If it points to the same target (same command and arguments, or the same URL), hmcp MUST adopt it as a managed entry and report the adoption.
   - Otherwise, hmcp MUST report a conflict and leave the entry unchanged unless the developer explicitly asks to replace it.
-- **FR-008**: Writes to client configs MUST follow the existing config-writer rules: refuse a file that fails to parse, write atomically, and keep the user's file permissions and unrelated content.
+- **FR-008**: Writes to client configs MUST follow the existing config-writer rules: refuse a file that fails to parse, write atomically with `0600` permissions (as every hmcp config writer does), and keep unrelated content, including keys the developer added to a managed entry.
 - **FR-009**: A status command MUST report, per registered server and per client: in sync, differs, missing, or conflict. For URL targets it MUST also report whether the server answers. The status command MUST NOT modify anything.
 - **FR-010**: Names reserved for H0wZy/mcp bridges (`codex`, `antigravity`, `claude`, `team`) MUST be refused as registry names.
 - **FR-011**: hmcp MUST warn, without refusing, when a URL's path does not follow `/<tool>/mcp`, and when two entries share the same host and path.
