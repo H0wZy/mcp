@@ -272,6 +272,13 @@ func TestCodexGuardReadyAndParsing(t *testing.T) {
 	}
 }
 
+func TestParseCodexServersReadsURL(t *testing.T) {
+	servers, err := parseCodexServers("[mcp_servers.my-server]\nurl = \"http://127.0.0.1:1/my-server/mcp\"\n")
+	if err != nil || len(servers) != 1 || servers[0].url != "http://127.0.0.1:1/my-server/mcp" {
+		t.Fatalf("servers = %+v, err = %v", servers, err)
+	}
+}
+
 func TestInstalledBridgesProjectAndLocalScope(t *testing.T) {
 	home := withHome(t)
 	project := t.TempDir()
