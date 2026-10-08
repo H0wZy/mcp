@@ -76,7 +76,7 @@ We introduced `SanitizeHealthMessage(msg)`:
 ### 4.4 v1.0.6 hardening (Phase 0 review, spec 006 and the real-CLI checks)
 - **Least privilege for read-only tools**:
   - Codex read tools run with `sandbox_mode=read-only` and `approval_policy=never`.
-  - Antigravity read tools run without `--dangerously-skip-permissions`, so print mode soft-denies edits and unapproved commands.
+  - Antigravity read tools run without `--dangerously-skip-permissions`, so print mode soft-denies edits and unapproved commands. **Known gap**: agy 1.3.1 runs MCP tools without a prompt in every mode (read-only, `--mode accept-edits`, a custom `--agent` with a `tools` list), and loads every server in its config. Any Antigravity bridge call or agy teammate can therefore reach the user's agy MCP servers (a shop, a paid generator, a 3D app). There is no per-call switch; the tool descriptions and the README warn about it, and the fix is to keep such servers out of agy's config.
   - Claude read tools start with only `Read`, `Grep` and `Glob`.
   - Context `paths` are no longer passed to Codex as `--add-dir`, which would make those folders writable.
 - **Process lifecycle** (`shared/executor.js`, `shared/server.js`):

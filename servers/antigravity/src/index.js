@@ -37,6 +37,12 @@ const STDERR_NOTICE_CHARS = 1500;
 // agy needs ~25 s around --print-timeout to start (CLI, sign-in, MCP servers) and to
 // return its partial output; the process limit leaves room for that.
 const PRINT_TIMEOUT_GRACE_MS = 60000;
+// agy 1.3.1 loads every MCP server in ~/.gemini/config/mcp_config.json and runs their
+// tools without asking, in every mode (default, accept-edits, a custom --agent; spec 006
+// research §7). No per-call switch exists, so callers must know.
+const AGY_MCP_NOTE =
+  ' Note: Antigravity also loads every MCP server the user configured in agy and can call their tools without asking ' +
+  '(agy has no per-call switch), so only use it where those servers are safe to reach.';
 const READ_ONLY_ANNOTATIONS = { readOnlyHint: true, openWorldHint: true };
 
 async function loadAgyCatalog() {
@@ -272,7 +278,7 @@ export const askAntigravityTool = {
     'Get an INDEPENDENT second opinion or answer from Google Antigravity ' +
     '(default model: Gemini 3.8 Flash High; configure via configure_antigravity). ' +
     'A different model family than Claude or OpenAI, ensuring an unbiased cross-check. ' +
-    'Provide a `prompt`; optionally pass `paths`, `model`, or `effort`.',
+    'Provide a `prompt`; optionally pass `paths`, `model`, or `effort`.' + AGY_MCP_NOTE,
   annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
@@ -309,7 +315,7 @@ export const reviewAntigravityTool = {
     'Request a thorough, structured code review from Google Antigravity (default model: Gemini 3.8 Flash High). ' +
     'Inspects code correctness, edge cases, race conditions, security vulnerabilities, performance, and architecture. ' +
     'Use tier "deep" via configure_antigravity for complex security/architecture reviews. ' +
-    'Read-only: it cannot edit files, and shell commands the user has not allowed are skipped, so pass the files to review in `paths`.',
+    'Read-only: it cannot edit files, and shell commands the user has not allowed are skipped, so pass the files to review in `paths`.' + AGY_MCP_NOTE,
   annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
@@ -355,7 +361,7 @@ export const brainstormAntigravityTool = {
   description:
     'Architectural brainstorming and exploration with Google Antigravity. ' +
     'Explores alternative design patterns, trade-offs, scalability considerations, and pros/cons. ' +
-    'Configure model and effort via configure_antigravity.',
+    'Configure model and effort via configure_antigravity.' + AGY_MCP_NOTE,
   annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
@@ -400,7 +406,7 @@ export const planAntigravityTool = {
   spawnsAgent: true,
   description:
     'Generate a step-by-step implementation plan or execution checklist using Google Antigravity. ' +
-    'Configure model and effort via configure_antigravity.',
+    'Configure model and effort via configure_antigravity.' + AGY_MCP_NOTE,
   annotations: READ_ONLY_ANNOTATIONS,
   inputSchema: {
     type: 'object',
@@ -446,7 +452,7 @@ export const delegateAntigravityTool = {
   description:
     'Hand a self-contained implementation task to Google Antigravity, which EDITS FILES inside `cwd` ' +
     '(permissions skipped). Review the diff afterwards. Returns the final report from Antigravity. ' +
-    'Configure model and effort via configure_antigravity.',
+    'Configure model and effort via configure_antigravity.' + AGY_MCP_NOTE,
   annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   inputSchema: {
     type: 'object',

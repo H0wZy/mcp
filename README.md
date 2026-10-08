@@ -246,6 +246,9 @@ A nested agent gets the mesh bridges (`codex`, `antigravity`, `claude`) and **no
 - **Claude Code** runs with `--strict-mcp-config` plus a temporary `--mcp-config` that lists only the bridges registered in your user config (`~/.claude.json`, user and local scope). A project's `.mcp.json` is never passed on, because Claude Code asks you before it starts those servers.
 - **Codex** runs with `-c mcp_servers.<name>.enabled=false` for every server that isn't a bridge.
 - **Antigravity** has no per-call switch, so it always loads every server in `~/.gemini/config/mcp_config.json`, and it **waits until all of them have connected** before it starts. If an Antigravity call returns `⏱️ Antigravity did not finish…` and names a server it was waiting for, bring that server back online or remove it (`agy mcp remove <name>`); `agy mcp disable` was not enough in agy 1.3.1.
+  - ⚠️ **Antigravity can call those servers' tools without asking.** In agy 1.3.1 an MCP tool runs without a permission prompt in every mode the bridge uses (read-only `ask_*` / `review_*` / …, and `delegate_antigravity`), and a custom `--agent` with a `tools` list does not restrict it. If your agy config has servers that publish, spend credits or drive other apps (a shop, a video generator, Blender, Unity…), any Antigravity bridge call or agy teammate can reach them. Keep such servers out of agy's config, or don't install the Antigravity bridge on that machine.
+  - If agy rejects one MCP tool's schema, every call fails at once; the bridge's error names the tool. `agy mcp disable <server>` fixes that case.
+- Read-only calls never reach the bridges' editing tools: nested Claude Code gets `--disallowedTools` for `delegate_*` / `configure_*`, nested Codex gets them in `disabled_tools`, whatever permission mode your own settings give the nested run.
 - `H0WZY_MCP_USER_SERVERS=1` lets nested Claude Code and Codex load your own servers again. At the maximum depth they still get none.
 
 ---
