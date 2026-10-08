@@ -76,7 +76,12 @@ test('codex turns switch off the user\'s other MCP servers, and the bridges too 
   );
   try {
     const off = (turn) => turn.args.filter((a) => a.startsWith('mcp_servers.'));
-    assert.deepEqual(off(buildTurn({ member: { ...base, agent: 'codex', canEdit: false }, prompt: 'P', hop })), ['mcp_servers.notes.enabled=false']);
+    assert.deepEqual(off(buildTurn({ member: { ...base, agent: 'codex', canEdit: false }, prompt: 'P', hop })), [
+      'mcp_servers.notes.enabled=false',
+      // A read-only teammate keeps the mesh without its editing tools.
+      'mcp_servers.claude.disabled_tools=["delegate_claude","configure_claude"]',
+    ]);
+    assert.deepEqual(off(buildTurn({ member: { ...base, agent: 'codex', canEdit: true }, prompt: 'P', hop })), ['mcp_servers.notes.enabled=false']);
     assert.deepEqual(off(buildTurn({ member: { ...base, agent: 'codex', canEdit: false }, prompt: 'P', hop: { ...hop, atMaxDepth: true } })), [
       'mcp_servers.claude.enabled=false',
       'mcp_servers.notes.enabled=false',

@@ -134,7 +134,7 @@ async function executeCodexCommand(
     ...ACCESS_OVERRIDES[access],
     // FR-026: the user's other MCP servers stay off (they doubled start-up time), and
     // at the maximum depth the bridges go too (L1).
-    ...codexMcpArgs({ atMaxDepth: hop?.atMaxDepth }),
+    ...codexMcpArgs({ atMaxDepth: hop?.atMaxDepth, readOnly: access === 'read-only' }),
     '-',
   ];
 

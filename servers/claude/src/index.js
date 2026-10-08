@@ -125,7 +125,7 @@ async function executeClaude({ prompt, prefix = '', paths, model, effort, cwd, d
   // FR-026: only the mesh bridges, not every MCP server the user configured; none at
   // the maximum depth (L1).
   // Without a cwd the child runs in this server's folder, so that is the local scope.
-  const mcp = claudeMcpArgs({ atMaxDepth: hop?.atMaxDepth, cwd: workDir ?? process.cwd() });
+  const mcp = claudeMcpArgs({ atMaxDepth: hop?.atMaxDepth, cwd: workDir ?? process.cwd(), readOnly: !delegate });
   args.push(...mcp.args);
 
   const minutes = delegate ? timeoutMinutes : READ_ONLY_TIMEOUT_MINUTES;

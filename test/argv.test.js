@@ -440,17 +440,25 @@ async function withAgentConfigs(fn) {
 }
 
 const offFlags = (argv) => argv.filter((a) => /^mcp_servers\..+\.enabled=false$/.test(a));
+const disabledTools = (argv) => argv.filter((a) => /^mcp_servers\..+\.disabled_tools=/.test(a));
 
 test('a nested Codex starts the mesh bridges but none of the user\'s other MCP servers', async () => {
   await withAgentConfigs(async () => {
     await withLog(codexFake, () => callTool(codex, 'ask_codex', { prompt: 'x' }));
     assert.deepEqual(offFlags(lastCall(codexFake).argv), ['mcp_servers.team.enabled=false', 'mcp_servers.blender.enabled=false']);
+    // A read-only call keeps the mesh bridges without their editing tools.
+    assert.deepEqual(disabledTools(lastCall(codexFake).argv), [
+      'mcp_servers.antigravity.disabled_tools=["delegate_antigravity","configure_antigravity"]',
+      'mcp_servers.claude.disabled_tools=["delegate_claude","configure_claude"]',
+    ]);
 
     await withLog(codexFake, () => callTool(codex, 'delegate_codex', { prompt: 'x', cwd: work }));
     assert.deepEqual(offFlags(lastCall(codexFake).argv), ['mcp_servers.team.enabled=false', 'mcp_servers.blender.enabled=false']);
+    assert.deepEqual(disabledTools(lastCall(codexFake).argv), []);
   });
 });
 
+const EDITING_MESH = (...names) => names.flatMap((n) => ['delegate', 'configure'].map((t) => `mcp__${n}__${t}_*`)).join(',');
 const READ_ONLY_MESH = (...names) => names.flatMap((n) => ['ask', 'review', 'brainstorm', 'plan'].map((t) => `mcp__${n}__${t}_*`)).join(',');
 
 test('a nested Claude Code gets only the mesh bridges through a temporary --mcp-config', async () => {
@@ -458,7 +466,8 @@ test('a nested Claude Code gets only the mesh bridges through a temporary --mcp-
     await withLog(claudeFake, () => callTool(claude, 'ask_claude', { prompt: 'x' }));
     let call = lastCall(claudeFake);
     const at = call.argv.indexOf('--mcp-config');
-    assert.deepEqual(call.argv.slice(at - 3, at + 1), ['--allowedTools', READ_ONLY_MESH('codex', 'antigravity'), '--strict-mcp-config', '--mcp-config']);
+    // A read-only call can't reach the bridges' editing tools, whatever the user's permission mode.
+    assert.deepEqual(call.argv.slice(at - 5, at + 1), ['--disallowedTools', EDITING_MESH('codex', 'antigravity'), '--allowedTools', READ_ONLY_MESH('codex', 'antigravity'), '--strict-mcp-config', '--mcp-config']);
     // --mcp-config takes several values: its file must be the last argument.
     assert.equal(at + 2, call.argv.length);
     assert.deepEqual(call.mcpConfig, { mcpServers: { codex: USER_CODEX, antigravity: USER_AGY } });
@@ -468,6 +477,7 @@ test('a nested Claude Code gets only the mesh bridges through a temporary --mcp-
     await withLog(claudeFake, () => callTool(claude, 'delegate_claude', { prompt: 'x', cwd: work }));
     call = lastCall(claudeFake);
     assert.deepEqual(call.mcpConfig, { mcpServers: { codex: LOCAL_CODEX, antigravity: USER_AGY } });
+    assert.equal(call.argv.includes('--disallowedTools'), false, 'delegate_claude may use the editing bridge tools');
   });
 });
 

@@ -74,7 +74,7 @@ export function buildTurn({ member, prompt, hop = null, outputFile, logFile, min
     }
     // FR-026 (spec 006): only the mesh bridges; none at the maximum depth.
     // Local scope belongs to the project, not to the teammate's worktree under ~/.h0wzy-mcp.
-    const mcp = claudeMcpArgs({ atMaxDepth, cwd: projectDir || member.workDir, env });
+    const mcp = claudeMcpArgs({ atMaxDepth, cwd: projectDir || member.workDir, env, readOnly: !member.canEdit });
     args.push(...caps, ...mcp.args);
     return { ok: true, command, args, input: prompt, cwd: member.workDir, env: claudeChildEnv(chainEnv), sessionId, warnings, cleanup: mcp.cleanup };
   }
@@ -91,7 +91,7 @@ export function buildTurn({ member, prompt, hop = null, outputFile, logFile, min
       '-c',
       `model_reasoning_effort=${member.cliEffort}`,
       ...access,
-      ...codexMcpArgs({ atMaxDepth, env }),
+      ...codexMcpArgs({ atMaxDepth, env, readOnly: !member.canEdit }),
       '-',
       '--color',
       'never',
