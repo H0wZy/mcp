@@ -25,6 +25,7 @@ const {
   hitPrintTimeout,
   stuckMcpServers,
   stuckServersHint,
+  invalidSchemaHint,
 } = shared;
 
 // Print mode soft-denies edits in read-only calls; telling the model up front saves the
@@ -240,8 +241,10 @@ async function executeAgyPrompt({
     exitCode: res.exitCode,
   });
 
+  // A user MCP server agy can't load makes every run fail: say which, first.
+  const schemaHint = invalidSchemaHint(res.stderr || res.stdout);
   return {
-    text: formatted.text + footer,
+    text: (schemaHint ? `⚠️ ${schemaHint}\n\n` : '') + formatted.text + footer,
     isError: true,
     outcome: res.timedOut ? 'timed-out' : 'failed',
   };

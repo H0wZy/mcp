@@ -7,7 +7,7 @@ import { resolveBinary } from '../resolver.js';
 import { noBridgeArgs } from '../l1.js';
 import { claudeMcpArgs, codexMcpArgs } from '../mcp-scope.js';
 import { claudeCapArgs, claudeChildEnv, parseClaudeResult } from '../claude.js';
-import { hitPrintTimeout, parseAgyEnvelope, readLogTail, stuckMcpServers, stuckServersHint } from '../agy.js';
+import { hitPrintTimeout, invalidSchemaHint, parseAgyEnvelope, readLogTail, stuckMcpServers, stuckServersHint } from '../agy.js';
 
 export const TEAM_AGENTS = ['claude', 'codex', 'antigravity'];
 
@@ -165,7 +165,12 @@ export function parseTurn(agent, res, { outputFile, logFile, sessionId = null } 
     return { ok: false, text, sessionId: sid, usage, error: withStuckServers("the turn hit agy's --print-timeout", agent, logFile) };
   }
   const error = data?.error ? (typeof data.error === 'string' ? data.error : JSON.stringify(data.error)) : null;
-  if (!res.ok || error) return { ok: false, text, sessionId: sid, usage, error: (error || res.stderr || `exit code ${res.exitCode}`).slice(0, 2000) };
+  if (!res.ok || error) {
+    const reason = error || res.stderr || `exit code ${res.exitCode}`;
+    // The hint goes first: the lead sees the first line of a failure.
+    const hint = invalidSchemaHint(reason);
+    return { ok: false, text, sessionId: sid, usage, error: (hint ? `${hint}\n${reason}` : reason).slice(0, 2000) };
+  }
   return { ok: true, text, sessionId: sid, usage, error: null };
 }
 

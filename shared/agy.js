@@ -15,7 +15,8 @@ const PRINT_TIMEOUT = /print timeout after [^\n]* with turn in progress/i;
 const STILL_CONNECTING = /MCP: \d+ server\(s\) still connecting after [^:\r\n]+: ([^\r\n]+)/g;
 // What an MCP server name looks like; anything else in the log line is dropped, so no
 // other log content reaches the caller.
-const SERVER_TOKEN = /^[A-Za-z0-9_.-]{1,64}$/;
+const INVALID_SCHEMA = /tool "([A-Za-z0-9_.-]{1,128})" advertises an invalid parameter schema/;
+const SERVER_TOKEN =/^[A-Za-z0-9_.-]{1,64}$/;
 const LOG_TAIL_BYTES = 512 * 1024;
 
 /**
@@ -52,6 +53,23 @@ export function stuckServersHint(names) {
     'Its turn only starts once every server in ~/.gemini/config/mcp_config.json is up. ' +
     `Bring ${names.length > 1 ? 'them' : 'it'} back online or remove ${names.length > 1 ? 'them' : 'it'} ` +
     `(\`agy mcp remove ${names[0]}\`); \`agy mcp disable\` did not stop the wait in agy 1.3.1.`
+  );
+}
+
+/**
+ * What to tell the caller when agy refuses to start because one MCP tool advertises a
+ * parameter schema it can't parse ("building toolbox: tool "mcp_mixar_…" advertises an
+ * invalid parameter schema"). agy stops at the first bad tool, so every run fails until
+ * that server is disabled (`agy mcp disable` fixes this case; verified with agy 1.3.1).
+ * @param {string} text agy stderr / stdout
+ */
+export function invalidSchemaHint(text) {
+  const match = String(text ?? '').match(INVALID_SCHEMA);
+  if (!match) return '';
+  return (
+    `Antigravity could not start: the MCP tool "${match[1]}" has a parameter schema agy rejects, ` +
+    'and agy stops on the first such tool. Disable the MCP server that provides it ' +
+    '(`agy mcp list`, then `agy mcp disable <server>`) or update that server.'
   );
 }
 

@@ -138,6 +138,7 @@ Format: `[ID] [P?] [Story] Description`. `[P]` means it can run in parallel (dif
 - [x] T033 Go: add `H0WZY_MCP_USER_SERVERS` to the Codex `env_vars` allow-list; `hmcp doctor` shows which servers nested agents load and flags an invalid value.
 - [x] T034 Re-run on the real CLIs: `ask_claude`, `ask_codex`, `delegate_claude`, `delegate_codex`, a 2-hop chain `ask_claude → ask_codex`, and `delegate_antigravity` against a stuck MCP server (research §7).
 - [x] T035 Fix the review of 1ec3792: Windows backslash and exact package names in `bridgeKind`; quoted and inline Codex servers; realpath, shadowing and `disabledMcpServers` in the local-scope lookup (Node and `hmcp doctor`); local scope for worktree teammates and calls without `cwd`; `--allowedTools` for read-only bridge tools; cleanup that never throws; no `--log-file` when no temp folder; agy grace kept inside the deadline; `hop.finish` when a team turn throws; agy server names and team errors sanitized; tests never run a real agent CLI (default fakes in `guard-env.js`, empty PATH in the Go detector test).
+- [x] T036 Real-CLI checks on the maintainer's machine: nested Claude in permission mode `default` (MCP call denied without `--allowedTools`, allowed with it); `CLAUDE_CONFIG_DIR` moves `.claude.json`; local scope keyed by the git root (`claudeProjectDir` in Node and `hmcp doctor`); `ask_antigravity`, `delegate_antigravity` and an agy teammate; a short hint when agy rejects an MCP tool's schema; Codex resume with root-level `-C`/`--approve-for-me` (recorded for spec 007).
 
 ---
 

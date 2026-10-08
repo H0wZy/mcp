@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, writeFileSync } from 'node:fs';
-import { createAgyLog, hitPrintTimeout, parseAgyEnvelope, readLogTail, stuckMcpServers, stuckServersHint } from '../agy.js';
+import { createAgyLog, hitPrintTimeout, invalidSchemaHint, parseAgyEnvelope, readLogTail, stuckMcpServers, stuckServersHint } from '../agy.js';
 
 test('hitPrintTimeout spots agy stopping at its own --print-timeout', () => {
   assert.equal(hitPrintTimeout('[agy] print timeout after 2m0s with turn in progress; returning partial output'), true);
@@ -44,4 +44,16 @@ test('parseAgyEnvelope reads the JSON envelope (verified with agy 1.3.1)', () =>
   assert.deepEqual(parseAgyEnvelope(`some banner\n${JSON.stringify(envelope)}`), envelope);
   assert.equal(parseAgyEnvelope('plain text answer'), null);
   assert.equal(parseAgyEnvelope('{"other": 1}'), null);
+});
+
+test('invalidSchemaHint names the MCP tool whose schema agy rejects', () => {
+  // agy 1.3.1 with the Mixar MCP server running (verified on the maintainer's machine).
+  const stderr =
+    'error: agent executor error: building toolbox: tool "mcp_mixar_mixar_ui_observe" advertises an invalid parameter schema: ' +
+    '"schema://tool-parameters.json#" is not valid against metaschema';
+  const hint = invalidSchemaHint(stderr);
+  assert.match(hint, /MCP tool "mcp_mixar_mixar_ui_observe"/);
+  assert.match(hint, /agy mcp disable <server>/);
+  assert.equal(invalidSchemaHint('exit code 1'), '');
+  assert.equal(invalidSchemaHint(undefined), '');
 });

@@ -302,6 +302,29 @@ func TestInstalledBridgesProjectAndLocalScope(t *testing.T) {
 	}
 }
 
+func TestInstalledBridgesLocalScopeKeyedByGitRoot(t *testing.T) {
+	home := withHome(t)
+	project := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(project, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(project, "sub")
+	if err := os.MkdirAll(sub, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// `claude mcp add -s local` in <repo>/sub writes the repository root as the key.
+	t.Chdir(sub)
+	writeFile(t, filepath.Join(home, ".claude.json"), `{"projects": {"`+filepath.ToSlash(project)+`": {"mcpServers": {"agy": {"command": "npx", "args": ["-y", "@h0wzy/mcp-server-antigravity"]}}}}}`)
+
+	edges, err := InstalledBridges()
+	if err != nil {
+		t.Fatalf("InstalledBridges: %v", err)
+	}
+	if len(edges) != 1 || edges[0].Scope != "local" || edges[0].Target != AgentAntigravity {
+		t.Fatalf("edges = %+v, want the local-scope antigravity bridge of the repository root", edges)
+	}
+}
+
 func TestInstalledBridgesLocalScopeThroughSymlink(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlinks need privileges on Windows")

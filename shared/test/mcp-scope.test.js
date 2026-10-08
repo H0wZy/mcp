@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -8,6 +8,7 @@ import {
   claudeConfigPath,
   claudeMcpArgs,
   claudeMeshServers,
+  claudeProjectDir,
   codexMcpArgs,
   userServersAllowed,
 } from '../mcp-scope.js';
@@ -211,4 +212,17 @@ test('claudeMeshServers: local scope shadows a user bridge, disabled servers sta
 test('stuckMcpServers keeps only server-name tokens from the agy log', () => {
   const log = 'MCP: 2 server(s) still connecting after 30s: google-flow-remote, a@b.com /etc/passwd\n';
   assert.deepEqual(stuckMcpServers(log), ['google-flow-remote']);
+});
+
+test('claudeMeshServers: local scope is keyed by the git root, as `claude mcp add -s local` writes it', () => {
+  const project = mkdtempSync(join(tmpdir(), 'hmcp-scope-git-'));
+  try {
+    mkdirSync(join(project, '.git'));
+    mkdirSync(join(project, 'sub', 'deeper'), { recursive: true });
+    const config = { projects: { [project.replace(/\\/g, '/')]: { mcpServers: { codex: CODEX_ENTRY } } } };
+    assert.deepEqual(claudeMeshServers({ claudeConfig: config, cwd: join(project, 'sub', 'deeper') }), { codex: CODEX_ENTRY });
+    assert.equal(claudeProjectDir(join(project, 'sub')), project);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
 });

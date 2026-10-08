@@ -83,7 +83,7 @@ func InstalledBridges() ([]BridgeEdge, error) {
 	} else {
 		edges = append(edges, jsonBridgeEdges(AgentClaude, "user", claudeUser, data["mcpServers"])...)
 		if cwd, err := os.Getwd(); err == nil {
-			if servers := claudeLocalServers(data, cwd); servers != nil {
+			if servers := claudeLocalServers(data, claudeProjectDir(cwd)); servers != nil {
 				edges = append(edges, jsonBridgeEdges(AgentClaude, "local", claudeUser, servers)...)
 			}
 		}
@@ -150,6 +150,22 @@ func claudeLocalServers(data map[string]interface{}, cwd string) interface{} {
 		}
 	}
 	return nil
+}
+
+// claudeProjectDir is the folder Claude Code keys local scope by: the git root
+// above cwd, or cwd itself outside a repository (`claude mcp add -s local` run
+// in <repo>/sub writes <repo>; checked with Claude Code 2.1.293).
+func claudeProjectDir(cwd string) string {
+	for dir := filepath.Clean(cwd); ; {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return cwd
+		}
+		dir = parent
+	}
 }
 
 // projectPathKeys is the path as written and as the OS resolves it (symlinks,

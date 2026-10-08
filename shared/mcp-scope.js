@@ -4,9 +4,9 @@
 // `claude -p` call (claude.ai connectors) and doubled Codex start-up time. Developers
 // who want their own servers in nested agents set H0WZY_MCP_USER_SERVERS=1.
 
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { bridgeKind, codexDisableArgs, listCodexServers, noBridgeArgs, readCodexConfig } from './l1.js';
 
 /** Bridges a nested agent keeps below the maximum depth. Nested teams are refused anyway. */
@@ -71,10 +71,24 @@ function projectKeys(path) {
   return keys;
 }
 
+/**
+ * The folder Claude Code keys local scope by: the git root above `cwd`, or `cwd` itself
+ * outside a repository (`claude mcp add -s local` run in `<repo>/sub` writes `<repo>`).
+ */
+export function claudeProjectDir(cwd) {
+  let dir = resolve(cwd);
+  for (;;) {
+    if (existsSync(join(dir, '.git'))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) return resolve(cwd);
+    dir = parent;
+  }
+}
+
 /** The local-scope entry of ~/.claude.json for `cwd`, if any. */
 function localProject(projects, cwd) {
   if (!cwd || !projects || typeof projects !== 'object') return undefined;
-  const wanted = projectKeys(cwd);
+  const wanted = projectKeys(claudeProjectDir(cwd));
   const entries = Object.entries(projects);
   const hit = entries.find(([path]) => wanted.has(projectKey(path))) || entries.find(([path]) => [...projectKeys(path)].some((k) => wanted.has(k)));
   return hit?.[1];
