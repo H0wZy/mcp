@@ -1,6 +1,6 @@
 {
   "name": "@h0wzy/mcp-server-codex",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "OpenAI Codex MCP Server connecting any MCP client to OpenAI Codex (GPT-6)",
   "keywords": [
     "mcp",
@@ -15,7 +15,7 @@
   },
   "main": "./src/index.js",
   "dependencies": {
-    "@h0wzy/mcp-shared": "1.0.6"
+    "@h0wzy/mcp-shared": "1.0.7"
   },
   "author": "Marcos (H0wZy) <h0wzymarcos@gmail.com>",
   "license": "MIT",

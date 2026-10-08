@@ -1,6 +1,6 @@
 {
   "name": "@h0wzy/mcp-server-team",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Agent team orchestrator MCP server: lead teams of Claude Code, OpenAI Codex and Google Antigravity teammates from any MCP client",
   "keywords": [
     "mcp",
@@ -18,7 +18,7 @@
   },
   "main": "./src/index.js",
   "dependencies": {
-    "@h0wzy/mcp-shared": "1.0.6"
+    "@h0wzy/mcp-shared": "1.0.7"
   },
   "author": "Marcos (H0wZy) <h0wzymarcos@gmail.com>",
   "license": "MIT",

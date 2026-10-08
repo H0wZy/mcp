@@ -1,6 +1,6 @@
 {
   "name": "@h0wzy/mcp-server-claude",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Claude Code MCP Server letting OpenAI Codex, Google Antigravity or any MCP client consult and delegate to Claude Code",
   "keywords": [
     "mcp",
@@ -15,7 +15,7 @@
   },
   "main": "./src/index.js",
   "dependencies": {
-    "@h0wzy/mcp-shared": "1.0.6"
+    "@h0wzy/mcp-shared": "1.0.7"
   },
   "author": "Marcos (H0wZy) <h0wzymarcos@gmail.com>",
   "license": "MIT",

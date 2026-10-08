@@ -97,7 +97,7 @@ This repo builds bridges between agents. You may yourself be running *inside* a 
 
 ## Versioning and releases
 
-- Latest published release: **v1.0.5** (commit `5cacc64`). Next release: **v1.0.6**, which ships specs 005 + 006 + 007 together.
+- Latest published release: **v1.0.6** (commit `1bffbaa`), which shipped specs 005 + 006 + 007. Next release: **v1.0.7** (`hmcp upgrade` on Windows).
 - A **new** npm package, such as `@h0wzy/mcp-server-claude`, must be published once by hand before CI can publish it. npm trusted publishing (OIDC) is configured per existing package.
 - All packages share one version. A release bump must update **every** one of these:
   - `package.json`, `shared/package.json`, `servers/codex/package.json`, `servers/antigravity/package.json`, `servers/claude/package.json`, `servers/team/package.json`, `npm/package.json` (plus any new `servers/*/package.json`), including each server's `@h0wzy/mcp-shared` dependency version

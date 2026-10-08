@@ -372,5 +372,5 @@ export const TEAM_TOOLS = [
 ];
 
 export function createServer() {
-  return createMcpServer({ name: 'team', version: '1.0.6', tools: TEAM_TOOLS, host });
+  return createMcpServer({ name: 'team', version: '1.0.7', tools: TEAM_TOOLS, host });
 }
