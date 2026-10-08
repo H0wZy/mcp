@@ -18,7 +18,7 @@ H0wZy/mcp connects the three leading coding agents (Claude Code, Codex, Antigrav
 | `npm/` | npm wrapper `@h0wzy/mcp` that runs the Go binary |
 | `test/`, `shared/test/` | Node test suites (`node:test`) |
 | `specs/NNN-name/` | Spec-Driven Development artifacts (spec-kit) |
-| `.agents/skills/speckit-*` | spec-kit skills (specify, clarify, plan, tasks, analyze, implement, …) |
+| `.claude/skills/speckit-*` | spec-kit skills (specify, clarify, plan, tasks, analyze, implement, …) |
 | `.specify/` | spec-kit templates, scripts and constitution |
 
 ## Commands
